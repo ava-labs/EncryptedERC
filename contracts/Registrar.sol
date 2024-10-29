@@ -3,11 +3,8 @@ pragma solidity 0.8.27;
 
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {Point} from "./types/Types.sol";
+import {IEncryptedERC} from "./interfaces/IEncryptedERC.sol";
 import {UserAlreadyRegistered} from "./errors/Errors.sol";
-
-// import {Point, User, RegisterProof} from "./structs/Structs.sol";
-// import {IRegisterVerifier} from "./interfaces/IRegisterVerifier.sol";
-// import {DuplicatePublicKey, InvalidProof} from "./errors/Errors.sol";
 
 contract Registrar {
     address public constant BURN_USER =
@@ -30,8 +27,15 @@ contract Registrar {
      */
     event Register(address indexed user, Point publicKey);
 
+    /**
+     *
+     * @param _encryptedERC Contract address of the encrypted ERC
+     * @param _tokenId Token ID
+     * @dev User needs to provide which contract and which token they want to register for
+     * so registrar can set the correct balance pct for the user
+     */
     // TODO(@mberatoz): pass the proof as a parameter
-    function register() external {
+    function register(address _encryptedERC, uint256 _tokenId) external {
         address account = msg.sender;
 
         // TODO(@mberatoz): verify the proof
@@ -42,6 +46,9 @@ contract Registrar {
 
         // TODO(@mberatoz): change this to the actual public key from the public ins
         _register(account, Point({X: 0, Y: 1}));
+
+        // TODO(@mberatoz): change this to the actualy PCT from the public ins
+        // IEncryptedERC(_encryptedERC).setUserBalancePCT(account, _tokenId, []);
     }
 
     /**

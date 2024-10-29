@@ -7,7 +7,7 @@ import {EncryptedUserBalances} from "./EncryptedUserBalances.sol";
 
 import {IRegistrar} from "./interfaces/IRegistrar.sol";
 import {CreateEncryptedERCParams, Point} from "./types/Types.sol";
-import {UserNotRegistered} from "./errors/Errors.sol";
+import {UserNotRegistered, UnauthorizedAccess} from "./errors/Errors.sol";
 
 contract EncryptedERC is TokenTracker, Ownable, EncryptedUserBalances {
     // registrar contract
@@ -68,6 +68,26 @@ contract EncryptedERC is TokenTracker, Ownable, EncryptedUserBalances {
         auditorPublicKey = Point({X: publicKey[0], Y: publicKey[1]});
 
         emit AuditorChanged(oldAuditor, _user);
+    }
+
+    /**
+     * @param _user User address
+     * @param _tokenId Token ID
+     * @param _pct Balance pct
+     * @dev Sets the balance pct for the user and token
+     * @dev Only the registrar can set the balance pct
+     */
+    function setUserBalancePCT(
+        address _user,
+        uint256 _tokenId,
+        uint256[7] memory _pct
+    ) external {
+        address sender = msg.sender;
+        if (sender != address(registrar)) {
+            revert UnauthorizedAccess();
+        }
+
+        _setUserBalancePCT(_user, _tokenId, _pct);
     }
 
     /**
