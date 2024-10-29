@@ -35,14 +35,14 @@ func Neg(x *big.Int) *big.Int {
 }
 
 func ECDH_PoseidonEncrypt(pk *babyjub.PublicKey, value *big.Int) ([]*big.Int, *big.Int, *babyjub.Point, *babyjub.Point, *big.Int, error) {
-	r, _ := rand.Int(rand.Reader, babyjub.Order)
+	r, _ := rand.Int(rand.Reader, babyjub.SubOrder)
 	pkr := babyjub.B8.Mul(r, pk.Point())
 
 	br := babyjub.B8.Mul(r, babyjub.B8)
 
 	key := []*big.Int{pkr.X, pkr.Y}
 	nonce, _ := rand.Int(rand.Reader, new(big.Int).Exp(big.NewInt(2), big.NewInt(100), nil))
-	msg := []*big.Int{value, big.NewInt(0)}
+	msg := []*big.Int{value, big.NewInt(0), big.NewInt(0)}
 	cipherText, err := PoseidonEncrypt(msg, key, nonce)
 	if err != nil {
 		return nil, nil, nil, nil, nil, fmt.Errorf("error at Poseidon encryption: %w", err)
@@ -56,7 +56,7 @@ func ECDH_PoseidonDecrypt(poseidonCiphertext []*big.Int, nonce *big.Int, pkr *ba
 	key := []*big.Int{x, y}
 
 	cipherText := poseidonCiphertext
-	msg, _ := PoseidonDecrypt(cipherText, key, nonce, 2)
+	msg, _ := PoseidonDecrypt(cipherText, key, nonce, 3)
 	return msg
 }
 
@@ -81,7 +81,7 @@ func TestTransfer() {
 	fmt.Println("Private key auditor:", skAuditor.BigInt())
 	fmt.Println("Public key auditor:", pkAuditor.X.String(), pkAuditor.Y.String())
 
-	balance, _ := rand.Int(rand.Reader, big.NewInt(0).Exp(big.NewInt(2), big.NewInt(160), nil))
+	balance, _ := rand.Int(rand.Reader, big.NewInt(0).Exp(big.NewInt(2), big.NewInt(127), nil))
 	fmt.Println("Balance:", balance)
 	c1Balance, c2Balance, _ := ECEG_Encrypt(pkSender, balance)
 	fmt.Println("Balance ciphertext:", c1Balance.X.String(), c1Balance.Y.String(), c2Balance.X.String(), c2Balance.Y.String())
@@ -97,13 +97,18 @@ func TestTransfer() {
 	// 	fmt.Println("Error at ECDH_PoseidonEncrypt:", err)
 	// }
 
-	receiverPCT, receiverNonce, _, receiverAuthKey, receiverR, err := ECDH_PoseidonEncrypt(pkReceiver, value)
+	receiverPCT, receiverNonce, receiverEncKey, receiverAuthKey, receiverR, err := ECDH_PoseidonEncrypt(pkReceiver, value)
+	fmt.Println("Receiver encryption key:", receiverEncKey.X.String(), receiverEncKey.Y.String())
 	if err != nil {
 		fmt.Println("Error at ECDH_PoseidonEncrypt:", err)
 	}
+	testDec := ECDH_PoseidonDecrypt(receiverPCT, receiverNonce, receiverEncKey, receiverAuthKey)
+	fmt.Println("Decrypted:", testDec[0].String(), testDec[1].String(), testDec[2].String())
 	fmt.Println("Length of receiverPCT:", len(receiverPCT))
 	fmt.Println("PCT receiver:", receiverPCT[0].String(), receiverPCT[1].String(), receiverPCT[2].String(), receiverPCT[3].String(), "Auth key:", receiverAuthKey.X.String(), receiverAuthKey.Y.String(), "Nonce:", receiverNonce.String(), "Random:", receiverR.String())
-	auditorPCT, auditorNonce, _, auditorAuthKey, auditorR, err := ECDH_PoseidonEncrypt(pkAuditor, value)
+
+	auditorPCT, auditorNonce, auditorEncKey, auditorAuthKey, auditorR, err := ECDH_PoseidonEncrypt(pkAuditor, value)
+	fmt.Println("Auditor encryption key:", auditorEncKey.X.String(), auditorEncKey.Y.String())
 	if err != nil {
 		fmt.Println("Error at ECDH_PoseidonEncrypt:", err)
 	}
@@ -119,6 +124,19 @@ func TestTransfer() {
 	}
 	nbConstraints := tr1cs.GetNbConstraints()
 	fmt.Println("Number of constraints:", nbConstraints)
+
+	tpublicKey := [2]frontend.Variable{
+		"12331190023552052561963550519369304572930277494921843945776382908510600125542",
+		"595243501900493769085221010613800404304889256298454265763117064368652824502",
+	}
+	tcipherText := [4]frontend.Variable{
+		"1346442611875109558874376628644931492516265686619610920315030518888139681987",
+		"11692850853574381637043037187514185398101877001040326590445992801438862810219",
+		"8848387341577456718128032569727954912537000473430353697498763534013804232467",
+		"9897997148063556275795170876684578940412644626496332981583094166035389116753",
+	}
+	tnonce := frontend.Variable("130648880371678480599974091179673939")
+	trandom := frontend.Variable("7594617276447635819568042022708357171530514221433647338250935334377235998009")
 
 	assignment := circuits.TransferCircuit{
 		Sender: circuits.Sender{
@@ -140,6 +158,10 @@ func TestTransfer() {
 			PCT:       circuits.PoseidonCiphertext{Ciphertext: [4]frontend.Variable{auditorPCT[0], auditorPCT[1], auditorPCT[2], auditorPCT[3]}, AuthKey: [2]frontend.Variable{auditorAuthKey.X, auditorAuthKey.Y}, Nonce: auditorNonce, Random: auditorR},
 		},
 		ValueToTransfer: value,
+		TestPCT:         tcipherText,
+		TestNonce:       tnonce,
+		TestPK:          tpublicKey,
+		TestRandom:      trandom,
 	}
 
 	fmt.Println("Generating witness")

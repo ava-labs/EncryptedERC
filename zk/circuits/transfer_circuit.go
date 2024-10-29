@@ -11,6 +11,10 @@ type TransferCircuit struct {
 	Receiver        Receiver
 	Auditor         Auditor
 	ValueToTransfer frontend.Variable
+	TestPCT         [4]frontend.Variable
+	TestNonce       frontend.Variable
+	TestPK          [2]frontend.Variable
+	TestRandom      frontend.Variable
 }
 
 func (circuit *TransferCircuit) Define(api frontend.API) error {
@@ -31,6 +35,8 @@ func (circuit *TransferCircuit) Define(api frontend.API) error {
 
 	// Verify receiver's encrypted value is the transfer amount
 	CheckValue(api, babyjub, circuit.Receiver, circuit.ValueToTransfer)
+
+	TestPCT(api, babyjub, circuit.TestPCT, circuit.TestNonce, circuit.TestPK, circuit.TestRandom)
 
 	// Verify receiver's encrypted summary includes the transfer amount and is encrypted with the receiver's public key
 	CheckPCTReceiver(api, babyjub, circuit.Receiver, circuit.ValueToTransfer)

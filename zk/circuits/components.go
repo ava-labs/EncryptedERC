@@ -59,22 +59,49 @@ func CheckValue(api frontend.API, bj *babyjub.BjWrapper, receiver Receiver, valu
 }
 
 /*
+CheckPCTReceiver verifies if the given receiver's Poseidon ciphertext is well-formed by re-encryption
+*/
+func CheckPCTReceiver(api frontend.API, bj *babyjub.BjWrapper, receiver Receiver, value frontend.Variable) {
+	poseidonAuthKey := bj.MulWithBasePoint(receiver.PCT.Random)
+	bj.AssertPoint(poseidonAuthKey, receiver.PCT.AuthKey[0], receiver.PCT.AuthKey[1])
+
+	// r * pk
+	poseidonEncryptionKey := bj.MulWithScalar(receiver.PublicKey.P.X, receiver.PublicKey.P.Y, receiver.PCT.Random)
+
+	// Decrypt the ciphertext
+	decrypted := poseidon.PoseidonDecrypt_3(api, [2]frontend.Variable{poseidonEncryptionKey.X, poseidonEncryptionKey.Y}, receiver.PCT.Nonce, receiver.PCT.Ciphertext)
+	api.Println("Decrypted receiver xd:", decrypted[0], "Decrypted receiver yd:", decrypted[1], "Value:", value)
+
+	api.AssertIsEqual(decrypted[0], value)
+	api.AssertIsEqual(decrypted[1], 0)
+	api.AssertIsEqual(decrypted[2], 0)
+	api.Println("Decrypted receiver poseidon:", decrypted[0], decrypted[1], decrypted[2], "Value:", value)
+
+}
+
+/*
 CheckPCTAuditor verifies if the given auditor's Poseidon ciphertext is well-formed by re-encryption
 */
 func CheckPCTAuditor(api frontend.API, bj *babyjub.BjWrapper, auditor Auditor, value frontend.Variable) {
 	poseidonAuthKey := bj.MulWithBasePoint(auditor.PCT.Random)
 	bj.AssertPoint(poseidonAuthKey, auditor.PCT.AuthKey[0], auditor.PCT.AuthKey[1])
-	api.Println("Poseidon auth key xd:", poseidonAuthKey.X, "Poseidon auth key yd:", poseidonAuthKey.Y)
+
 	// r * pk
 	poseidonEncryptionKey := bj.MulWithScalar(auditor.PublicKey.P.X, auditor.PublicKey.P.Y, auditor.PCT.Random)
-	api.Println("Poseidon encryption key xd:", poseidonEncryptionKey.X, "Poseidon encryption key yd:", poseidonEncryptionKey.Y)
 
 	// Decrypt the ciphertext
-	decrypted := poseidon.PoseidonDecrypt_2(api, [2]frontend.Variable{poseidonEncryptionKey.X, poseidonEncryptionKey.Y}, auditor.PCT.Nonce, auditor.PCT.Ciphertext)
+	decrypted := poseidon.PoseidonDecrypt_3(api, [2]frontend.Variable{poseidonEncryptionKey.X, poseidonEncryptionKey.Y}, auditor.PCT.Nonce, auditor.PCT.Ciphertext)
 
 	api.AssertIsEqual(decrypted[0], value)
 	api.AssertIsEqual(decrypted[1], 0)
-	api.Println("Decrypted auditor:", decrypted[0], "Value:", value)
+	api.AssertIsEqual(decrypted[2], 0)
+	api.Println("Decrypted auditor poseidon:", decrypted[0], decrypted[1], decrypted[2], "Value:", value)
+}
+
+func TestPCT(api frontend.API, bj *babyjub.BjWrapper, ciphertext [4]frontend.Variable, nonce frontend.Variable, pk [2]frontend.Variable, random frontend.Variable) {
+	encKey := bj.MulWithScalar(pk[0], pk[1], random)
+	decrypted := poseidon.PoseidonDecryptSingle(api, [2]frontend.Variable{encKey.X, encKey.Y}, nonce, ciphertext)
+	api.Println("Decrypted:", decrypted[0])
 }
 
 /*
@@ -93,22 +120,3 @@ CheckPCTSender verifies if the given sender's Poseidon ciphertext is well-formed
 // 	api.AssertIsEqual(decrypted[0], sender.Balance)
 
 // }
-
-/*
-CheckPCTReceiver verifies if the given receiver's Poseidon ciphertext is well-formed by re-encryption
-*/
-func CheckPCTReceiver(api frontend.API, bj *babyjub.BjWrapper, receiver Receiver, value frontend.Variable) {
-	poseidonAuthKey := bj.MulWithBasePoint(receiver.PCT.Random)
-	bj.AssertPoint(poseidonAuthKey, receiver.PCT.AuthKey[0], receiver.PCT.AuthKey[1])
-
-	// r * pk
-	poseidonEncryptionKey := bj.MulWithScalar(receiver.PublicKey.P.X, receiver.PublicKey.P.Y, receiver.PCT.Random)
-
-	// Decrypt the ciphertext
-	decrypted := poseidon.PoseidonDecrypt_2(api, [2]frontend.Variable{poseidonEncryptionKey.X, poseidonEncryptionKey.Y}, receiver.PCT.Nonce, receiver.PCT.Ciphertext)
-	api.Println("Decrypted receiver xd:", decrypted[0], "Decrypted receiver yd:", decrypted[1], "Value:", value)
-	api.AssertIsEqual(decrypted[0], value)
-	api.AssertIsEqual(decrypted[1], 0)
-	api.Println("Decrypted receiver:", decrypted[0], "Value:", value)
-
-}
