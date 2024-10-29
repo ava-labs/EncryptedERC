@@ -2,6 +2,7 @@
 pragma solidity 0.8.27;
 
 import {EncryptedBalance, EGCT, BalanceHistory} from "./types/Types.sol";
+import {BabyJubJub} from "./libraries/BabyJubJub.sol";
 
 contract EncryptedUserBalances {
     mapping(address user => mapping(uint256 tokenId => EncryptedBalance balance))
@@ -16,7 +17,15 @@ contract EncryptedUserBalances {
      */
     function balanceOfForStandalone(
         address _user
-    ) external view returns (EGCT memory eGCT, uint256 nonce) {
+    )
+        external
+        view
+        returns (
+            EGCT memory eGCT,
+            uint256 nonce,
+            uint256[7][] memory amountPCTs
+        )
+    {
         return balanceOf(_user, 0);
     }
 
@@ -30,14 +39,46 @@ contract EncryptedUserBalances {
     function balanceOf(
         address _user,
         uint256 _tokenId
-    ) public view returns (EGCT memory eGCT, uint256 nonce) {
+    )
+        public
+        view
+        returns (
+            EGCT memory eGCT,
+            uint256 nonce,
+            uint256[7][] memory amountPCTs
+        )
+    {
         EncryptedBalance storage balance = balances[_user][_tokenId];
-        return (balance.eGCT, balance.nonce);
+        return (balance.eGCT, balance.nonce, balance.amountPCTs);
     }
 
     ///////////////////////////////////////////////////
     ///               Internal Functions            ///
     ///////////////////////////////////////////////////
+
+    function _addToUserBalance(
+        address _user,
+        uint256 _tokenId,
+        EGCT memory _eGCT,
+        uint256[7] memory _amountPCT
+    ) internal {
+        EncryptedBalance storage balance = balances[_user][_tokenId];
+
+        // if user balance is not initialized, initialize it
+        if (balance.eGCT.c1.X == 0 && balance.eGCT.c1.Y == 0) {
+            balance.eGCT = _eGCT;
+        } else {
+            // if user balance is already initialized, add the encrypted amount to the balance
+            balance.eGCT.c1 = BabyJubJub._add(balance.eGCT.c1, _eGCT.c1);
+            balance.eGCT.c2 = BabyJubJub._add(balance.eGCT.c2, _eGCT.c2);
+        }
+
+        // in all the case
+        _addToUserHistory(_user, _tokenId);
+
+        // add the amount pct to the balance
+        balance.amountPCTs.push(_amountPCT);
+    }
 
     /**
      * @param _user User address

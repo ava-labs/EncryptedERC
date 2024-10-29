@@ -11,6 +11,8 @@ struct CreateEncryptedERCParams {
     bool _isConverter;
     string _name;
     string _symbol;
+    // verifiers
+    address _mintVerifier;
 }
 
 struct EncryptedBalance {

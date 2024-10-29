@@ -48,6 +48,8 @@ func main() {
 	switch *operation {
 	case "REGISTER":
 		hardhat.Register(pp)
+	case "MINT":
+		hardhat.Mint(pp)
 	}
 
 	// switch *operation {

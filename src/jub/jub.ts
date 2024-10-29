@@ -5,7 +5,12 @@ import {
 	addPoint,
 	mulPointEscalar,
 } from "@zk-kit/baby-jubjub";
-import { formatPrivKeyForBabyJub, genRandomBabyJubValue } from "maci-crypto";
+import {
+	formatPrivKeyForBabyJub,
+	genRandomBabyJubValue,
+	poseidonDecrypt,
+	poseidonEncrypt,
+} from "maci-crypto";
 
 // el-gamal decryption
 export const decryptPoint = (
@@ -44,4 +49,42 @@ export const encryptMessage = (
 		cipher: encryptPoint(publicKey, p, random),
 		random,
 	};
+};
+
+// generate a random bigint between 1 and 2^128
+export const randomNonce = (): bigint =>
+	BigInt(Math.floor(Math.random() * Number(2n ** 128n - 1n)) + 1);
+
+export const processPoseidonEncryption = (
+	inputs: bigint[],
+	publicKey: bigint[],
+) => {
+	const nonce = randomNonce();
+	const encRandom = genRandomBabyJubValue();
+
+	const poseidonEncryptionKey = mulPointEscalar(
+		publicKey as Point<bigint>,
+		encRandom,
+	);
+	const authKey = mulPointEscalar(Base8, encRandom);
+	const ciphertext = poseidonEncrypt(inputs, poseidonEncryptionKey, nonce);
+
+	return { ciphertext, nonce, encRandom, poseidonEncryptionKey, authKey };
+};
+
+export const processPoseidonDecryption = (
+	ciphertext: bigint[],
+	authKey: bigint[],
+	nonce: bigint,
+	privateKey: bigint,
+	length: number,
+) => {
+	const sharedKey = mulPointEscalar(
+		authKey as Point<bigint>,
+		formatPrivKeyForBabyJub(privateKey),
+	);
+
+	const decrypted = poseidonDecrypt(ciphertext, sharedKey, nonce, length);
+
+	return decrypted.slice(0, length);
 };

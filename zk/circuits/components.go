@@ -85,9 +85,8 @@ func CheckPCTAuditor(api frontend.API, bj *babyjub.BjWrapper, auditor Auditor, v
 	poseidonEncryptionKey := bj.MulWithScalar(auditor.PublicKey.P.X, auditor.PublicKey.P.Y, auditor.PCT.Random)
 
 	// Decrypt the ciphertext
-	decrypted := poseidon.PoseidonDecrypt_2(api, [2]frontend.Variable{poseidonEncryptionKey.X, poseidonEncryptionKey.Y}, auditor.PCT.Nonce, auditor.PCT.Ciphertext)
+	decrypted := poseidon.PoseidonDecryptSingle(api, [2]frontend.Variable{poseidonEncryptionKey.X, poseidonEncryptionKey.Y}, auditor.PCT.Nonce, auditor.PCT.Ciphertext)
 	api.AssertIsEqual(decrypted[0], value)
-
 }
 
 /*
