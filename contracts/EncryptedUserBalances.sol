@@ -15,7 +15,7 @@ contract EncryptedUserBalances {
      * @return nonce Nonce
      * @dev Returns the balance of the user for the standalone token (tokenId = 0)
      */
-    function balanceOfForStandalone(
+    function balanceOfStandalone(
         address _user
     )
         external

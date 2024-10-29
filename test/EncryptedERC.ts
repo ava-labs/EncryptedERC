@@ -192,7 +192,7 @@ describe("EncryptedERC", () => {
 
 			it("after private mint, balance should be updated properly", async () => {
 				const receiver = users[0];
-				const balance = await encryptedERC.balanceOfForStandalone(
+				const balance = await encryptedERC.balanceOfStandalone(
 					receiver.signer.address,
 				);
 
