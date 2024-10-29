@@ -40,7 +40,7 @@ type PublicKey struct {
 
 type PoseidonCiphertext struct {
 	Ciphertext [4]frontend.Variable `gnark:",public"`
-	AuthKey    [2]frontend.Variable `gnark:",public"`
+	AuthKey    twistededwards.Point `gnark:",public"`
 	Nonce      frontend.Variable    `gnark:",public"`
 	Random     frontend.Variable
 }

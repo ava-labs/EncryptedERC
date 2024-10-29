@@ -31,34 +31,37 @@ func ECEG_Decrypt(sk *babyjub.PrivKeyScalar, c1 *babyjub.Point, c2 *babyjub.Poin
 }
 
 func Neg(x *big.Int) *big.Int {
-	return new(big.Int).Sub(babyjub.Order, x)
+	sO, _ := new(big.Int).SetString("21888242871839275222246405745257275088548364400416034343698204186575808495617", 10)
+	return new(big.Int).Sub(sO, x)
 }
 
 func ECDH_PoseidonEncrypt(pk *babyjub.PublicKey, value *big.Int) ([]*big.Int, *big.Int, *babyjub.Point, *babyjub.Point, *big.Int, error) {
-	r, _ := rand.Int(rand.Reader, babyjub.SubOrder)
+	sO, _ := new(big.Int).SetString("21888242871839275222246405745257275088548364400416034343698204186575808495617", 10)
+	r, _ := rand.Int(rand.Reader, sO)
 	pkr := babyjub.B8.Mul(r, pk.Point())
 
 	br := babyjub.B8.Mul(r, babyjub.B8)
 
 	key := []*big.Int{pkr.X, pkr.Y}
 	nonce, _ := rand.Int(rand.Reader, new(big.Int).Exp(big.NewInt(2), big.NewInt(100), nil))
-	msg := []*big.Int{value, big.NewInt(0), big.NewInt(0)}
-	cipherText, err := PoseidonEncrypt(msg, key, nonce)
+	msg := []*big.Int{value}
+	p := Poseidon{}
+	cipherText, _, err := p.Encrypt(key, msg, nonce, r)
 	if err != nil {
 		return nil, nil, nil, nil, nil, fmt.Errorf("error at Poseidon encryption: %w", err)
 	}
 	return cipherText, nonce, pkr, br, r, nil
 }
 
-func ECDH_PoseidonDecrypt(poseidonCiphertext []*big.Int, nonce *big.Int, pkr *babyjub.Point, br *babyjub.Point) []*big.Int {
-	x := pkr.X
-	y := pkr.Y
-	key := []*big.Int{x, y}
+// func ECDH_PoseidonDecrypt(poseidonCiphertext []*big.Int, nonce *big.Int, pkr *babyjub.Point, br *babyjub.Point) []*big.Int {
+// 	x := pkr.X
+// 	y := pkr.Y
+// 	key := []*big.Int{x, y}
 
-	cipherText := poseidonCiphertext
-	msg, _ := PoseidonDecrypt(cipherText, key, nonce, 3)
-	return msg
-}
+// 	cipherText := poseidonCiphertext
+// 	msg, _ := PoseidonDecrypt(cipherText, key, nonce, 3)
+// 	return msg
+// }
 
 func TestTransfer() {
 	skpSender := babyjub.NewRandPrivKey()
@@ -102,17 +105,17 @@ func TestTransfer() {
 	if err != nil {
 		fmt.Println("Error at ECDH_PoseidonEncrypt:", err)
 	}
-	testDec := ECDH_PoseidonDecrypt(receiverPCT, receiverNonce, receiverEncKey, receiverAuthKey)
-	fmt.Println("Decrypted:", testDec[0].String(), testDec[1].String(), testDec[2].String())
-	fmt.Println("Length of receiverPCT:", len(receiverPCT))
-	fmt.Println("PCT receiver:", receiverPCT[0].String(), receiverPCT[1].String(), receiverPCT[2].String(), receiverPCT[3].String(), "Auth key:", receiverAuthKey.X.String(), receiverAuthKey.Y.String(), "Nonce:", receiverNonce.String(), "Random:", receiverR.String())
+	// testDec := ECDH_PoseidonDecrypt(receiverPCT, receiverNonce, receiverEncKey, receiverAuthKey)
+	// fmt.Println("Decrypted:", testDec[0].String())
+	// fmt.Println("Length of receiverPCT:", len(receiverPCT))
+	// fmt.Println("PCT receiver:", receiverPCT[0].String(), receiverPCT[1].String(), receiverPCT[2].String(), receiverPCT[3].String(), "Auth key:", receiverAuthKey.X.String(), receiverAuthKey.Y.String(), "Nonce:", receiverNonce.String(), "Random:", receiverR.String())
 
-	auditorPCT, auditorNonce, auditorEncKey, auditorAuthKey, auditorR, err := ECDH_PoseidonEncrypt(pkAuditor, value)
-	fmt.Println("Auditor encryption key:", auditorEncKey.X.String(), auditorEncKey.Y.String())
-	if err != nil {
-		fmt.Println("Error at ECDH_PoseidonEncrypt:", err)
-	}
-	fmt.Println("PCT auditor:", auditorPCT[0].String(), auditorPCT[1].String(), auditorPCT[2].String(), auditorPCT[3].String(), "Auth key:", auditorAuthKey.X.String(), auditorAuthKey.Y.String(), "Nonce:", auditorNonce.String(), "Random:", auditorR.String())
+	// auditorPCT, auditorNonce, auditorEncKey, auditorAuthKey, auditorR, err := ECDH_PoseidonEncrypt(pkAuditor, value)
+	// fmt.Println("Auditor encryption key:", auditorEncKey.X.String(), auditorEncKey.Y.String())
+	// if err != nil {
+	// 	fmt.Println("Error at ECDH_PoseidonEncrypt:", err)
+	// }
+	// fmt.Println("PCT auditor:", auditorPCT[0].String(), auditorPCT[1].String(), auditorPCT[2].String(), auditorPCT[3].String(), "Auth key:", auditorAuthKey.X.String(), auditorAuthKey.Y.String(), "Nonce:", auditorNonce.String(), "Random:", auditorR.String())
 
 	fmt.Println("--------------------------------")
 
@@ -139,24 +142,24 @@ func TestTransfer() {
 	trandom := frontend.Variable("7594617276447635819568042022708357171530514221433647338250935334377235998009")
 
 	assignment := circuits.TransferCircuit{
-		Sender: circuits.Sender{
-			PrivateKey:  skSender.BigInt(),
-			PublicKey:   circuits.PublicKey{P: twistededwards.Point{X: pkSender.X, Y: pkSender.Y}},
-			Balance:     balance,
-			BalanceEGCT: circuits.ElGamalCiphertext{C1: twistededwards.Point{X: c1Balance.X, Y: c1Balance.Y}, C2: twistededwards.Point{X: c2Balance.X, Y: c2Balance.Y}},
-			ValueEGCT:   circuits.ElGamalCiphertext{C1: twistededwards.Point{X: c1ValueSender.X, Y: c1ValueSender.Y}, C2: twistededwards.Point{X: c2ValueSender.X, Y: c2ValueSender.Y}},
-		},
+		// Sender: circuits.Sender{
+		// 	PrivateKey:  skSender.BigInt(),
+		// 	PublicKey:   circuits.PublicKey{P: twistededwards.Point{X: pkSender.X, Y: pkSender.Y}},
+		// 	Balance:     balance,
+		// 	BalanceEGCT: circuits.ElGamalCiphertext{C1: twistededwards.Point{X: c1Balance.X, Y: c1Balance.Y}, C2: twistededwards.Point{X: c2Balance.X, Y: c2Balance.Y}},
+		// 	ValueEGCT:   circuits.ElGamalCiphertext{C1: twistededwards.Point{X: c1ValueSender.X, Y: c1ValueSender.Y}, C2: twistededwards.Point{X: c2ValueSender.X, Y: c2ValueSender.Y}},
+		// },
 
 		Receiver: circuits.Receiver{
 			PublicKey:   circuits.PublicKey{P: twistededwards.Point{X: pkReceiver.X, Y: pkReceiver.Y}},
 			ValueEGCT:   circuits.ElGamalCiphertext{C1: twistededwards.Point{X: c1ValueReceiver.X, Y: c1ValueReceiver.Y}, C2: twistededwards.Point{X: c2ValueReceiver.X, Y: c2ValueReceiver.Y}},
 			ValueRandom: circuits.Randomness{R: recvRandom},
-			PCT:         circuits.PoseidonCiphertext{Ciphertext: [4]frontend.Variable{receiverPCT[0], receiverPCT[1], receiverPCT[2], receiverPCT[3]}, AuthKey: [2]frontend.Variable{receiverAuthKey.X, receiverAuthKey.Y}, Nonce: receiverNonce, Random: receiverR},
+			PCT:         circuits.PoseidonCiphertext{Ciphertext: [4]frontend.Variable{receiverPCT[0], receiverPCT[1], receiverPCT[2], receiverPCT[3]}, AuthKey: twistededwards.Point{X: receiverAuthKey.X, Y: receiverAuthKey.Y}, Nonce: receiverNonce, Random: receiverR},
 		},
-		Auditor: circuits.Auditor{
-			PublicKey: circuits.PublicKey{P: twistededwards.Point{X: pkAuditor.X, Y: pkAuditor.Y}},
-			PCT:       circuits.PoseidonCiphertext{Ciphertext: [4]frontend.Variable{auditorPCT[0], auditorPCT[1], auditorPCT[2], auditorPCT[3]}, AuthKey: [2]frontend.Variable{auditorAuthKey.X, auditorAuthKey.Y}, Nonce: auditorNonce, Random: auditorR},
-		},
+		// Auditor: circuits.Auditor{
+		// 	PublicKey: circuits.PublicKey{P: twistededwards.Point{X: pkAuditor.X, Y: pkAuditor.Y}},
+		// 	PCT:       circuits.PoseidonCiphertext{Ciphertext: [4]frontend.Variable{auditorPCT[0], auditorPCT[1], auditorPCT[2], auditorPCT[3]}, AuthKey: [2]frontend.Variable{auditorAuthKey.X, auditorAuthKey.Y}, Nonce: auditorNonce, Random: auditorR},
+		// },
 		ValueToTransfer: value,
 		TestPCT:         tcipherText,
 		TestNonce:       tnonce,

@@ -1,159 +1,179 @@
 package utils
 
 import (
-	"fmt"
+	// "ac-jpm-client/helpers"
+	"errors"
 	"math/big"
 
+	"github.com/iden3/go-iden3-crypto/babyjub"
 	"github.com/iden3/go-iden3-crypto/ff"
-	"github.com/iden3/go-iden3-crypto/poseidon"
+	"github.com/iden3/go-iden3-crypto/utils"
 )
 
-var two128 big.Int
+var (
+	TWO_128 = utils.NewIntFromString("340282366920938463463374607431768211456")
+)
 
-func init() {
-	two128.SetString("340282366920938463463374607431768211456", 10)
-}
+type Poseidon struct{}
 
-// Implements the encryption and decryption functions using Poseidon hash
-// as described: https://drive.google.com/file/d/1EVrP3DzoGbmzkRmYnyEDcIQcXVU7GlOd/view
-func PoseidonEncrypt(msg []*big.Int, key []*big.Int, nonce *big.Int) ([]*big.Int, error) {
-	if len(key) != 2 {
-		return nil, fmt.Errorf("the key must have 2 elements, but got %d", len(key))
+func (p *Poseidon) Encrypt(
+	publicKey []*big.Int,
+	inputs []*big.Int,
+	nonce *big.Int,
+	encryptionRandom *big.Int,
+) ([]*big.Int, []*big.Int, error) {
+	if len(publicKey) != 2 {
+		return nil, nil, errors.New("publicKey must be 2 elements")
 	}
-	if nonce.Cmp(&two128) >= 0 {
-		return nil, fmt.Errorf("the nonce must be less than 2^128, but got %s", nonce.String())
+	pubKey := babyjub.NewPoint()
+	pubKey.X = publicKey[0]
+	pubKey.Y = publicKey[1]
+
+	poseidonAuthKey := babyjub.NewPoint().Mul(encryptionRandom, babyjub.B8)
+	encryptionKey := babyjub.NewPoint().Mul(encryptionRandom, pubKey)
+
+	sharedKey := []*ff.Element{
+		ff.NewElement().SetBigInt(encryptionKey.X),
+		ff.NewElement().SetBigInt(encryptionKey.Y),
 	}
 
-	// the size of the message array must be a multiple of 3
-	// pad with 0 if necessary
+	if nonce.Cmp(TWO_128) == 1 {
+		return nil, nil, errors.New("nonce must be less than 2^128")
+	}
+
+	msg := utils.BigIntArrayToElementArray(inputs)
+	for len(msg)%3 != 0 {
+		msg = append(msg, ff.NewElement().SetZero())
+	}
+
+	state := []*ff.Element{
+		ff.NewElement().SetZero(),
+		sharedKey[0],
+		sharedKey[1],
+		ff.NewElement().Add(
+			ff.NewElement().SetBigInt(nonce),
+			ff.NewElement().Mul(
+				ff.NewElement().SetUint64(uint64(len(inputs))),
+				ff.NewElement().SetBigInt(TWO_128),
+			),
+		),
+	}
+	cipherText := []*ff.Element{}
+
 	length := len(msg)
-	if length%3 > 0 {
-		length += 3 - (length % 3)
-	}
-	message := make([]*big.Int, length)
-	copy(message, msg)
-	for idx := len(msg); idx < length; idx++ {
-		message[idx] = big.NewInt(0)
-	}
 
-	// Create the initial state
-	// S = (0, kS[0], kS[1], N + l * 2^128)
-	l := big.NewInt(int64(len(msg)))
-	state := []*big.Int{big.NewInt(0), key[0], key[1], new(big.Int).Add(nonce, new(big.Int).Mul(l, &two128))}
+	for i := 0; i < length/3; i++ {
+		state = p.poseidonStrategy(state)
 
-	cipherText := make([]*big.Int, length+1)
-	var err error
+		state[1] = ff.NewElement().Add(state[1], msg[i*3])
+		state[2] = ff.NewElement().Add(state[2], msg[i*3+1])
+		state[3] = ff.NewElement().Add(state[3], msg[i*3+2])
 
-	n := length / 3
-	i := 0
-	for ; i < n; i++ {
-		// Iterate Poseidon on the state
-		state, err = poseidon.HashEx(state, 4)
-		if err != nil {
-			return nil, err
-		}
-
-		// Modify the state for the next round
-		// state[1] = addMod(message[i * 3], state[1]);
-		state[1] = ff.NewElement().Add(ff.NewElement().SetBigInt(message[i*3]), ff.NewElement().SetBigInt(state[1])).ToBigIntRegular(state[1])
-		// state[2] = addMod(message[i * 3 + 1], state[2]);
-		state[2] = ff.NewElement().Add(ff.NewElement().SetBigInt(message[i*3+1]), ff.NewElement().SetBigInt(state[2])).ToBigIntRegular(state[2])
-		// state[3] = addMod(message[i * 3 + 2], state[3]);
-		state[3] = ff.NewElement().Add(ff.NewElement().SetBigInt(message[i*3+2]), ff.NewElement().SetBigInt(state[3])).ToBigIntRegular(state[3])
-
-		// Record the three elements of the encrypted message
-		cipherText[i*3] = state[1]
-		cipherText[i*3+1] = state[2]
-		cipherText[i*3+2] = state[3]
+		cipherText = append(cipherText, state[1])
+		cipherText = append(cipherText, state[2])
+		cipherText = append(cipherText, state[3])
 	}
 
-	// Iterate Poseidon on the state one last time
-	state, err = poseidon.HashEx(state, 4)
-	if err != nil {
-		return nil, err
-	}
+	state = p.poseidonStrategy(state)
+	cipherText = append(cipherText, state[1])
 
-	// Record the last ciphertext element
-	cipherText[i*3] = state[1]
-
-	return cipherText, nil
+	return utils.ElementArrayToBigIntArray(cipherText), []*big.Int{
+		poseidonAuthKey.X,
+		poseidonAuthKey.Y,
+	}, nil
 }
 
-// the "cipherText" parameter must be the output of the PoseidonEncrypt function, with potentially
-// extra elements due to the padding of the plain text messages with 0s to make the length to be 3n.
-//
-// the "length" parameter must be the length of the original message
-func PoseidonDecrypt(cipherText []*big.Int, key []*big.Int, nonce *big.Int, length int) ([]*big.Int, error) {
+func (p *Poseidon) Decrypt(
+	key []*big.Int,
+	cipherText []*big.Int,
+	secretKey *big.Int,
+	nonce *big.Int,
+	length int,
+) ([]*big.Int, error) {
+
 	if len(key) != 2 {
-		return nil, fmt.Errorf("the key must have 2 elements, but got %d", len(key))
-	}
-	// length of the cipher text must be 3n+1
-	if len(cipherText)%3 != 1 {
-		return nil, fmt.Errorf("the length of the cipher text must be 3n+1, but got %d", len(cipherText))
-	}
-	if nonce.Cmp(&two128) >= 0 {
-		return nil, fmt.Errorf("the nonce must be less than 2^128, but got %s", nonce.String())
-	}
-	if length < 1 || length > len(cipherText)-1 {
-		return nil, fmt.Errorf("the length must be between 1 and %d (length of cipher text array - 1), but got %d", len(cipherText)-1, length)
+		return nil, errors.New("authKey must be 2 elements")
 	}
 
-	// Create the initial state
-	// S = (0, kS[0], kS[1], N + l * 2^128)
-	l := big.NewInt(int64(length))
-	state := []*big.Int{big.NewInt(0), key[0], key[1], new(big.Int).Add(nonce, new(big.Int).Mul(l, &two128))}
+	authKey := babyjub.NewPoint()
+	authKey.X = key[0]
+	authKey.Y = key[1]
 
-	message := make([]*big.Int, len(cipherText)-1)
+	sharedKey := babyjub.NewPoint().Mul(secretKey, authKey)
 
-	// Decrypt the message
-	n := len(cipherText) - 1
-	var err error
-	i := 0
-	for ; i < n/3; i++ {
-		// Iterate Poseidon on the state
-		state, err = poseidon.HashEx(state, 4)
-		if err != nil {
-			return nil, err
+	if nonce.Cmp(TWO_128) == 1 {
+		return nil, errors.New("nonce must be less than 2^128")
+	}
+
+	ct := utils.BigIntArrayToElementArray(cipherText)
+	msg := []*ff.Element{}
+
+	state := []*ff.Element{
+		ff.NewElement().SetZero(),
+		ff.NewElement().SetBigInt(sharedKey.X),
+		ff.NewElement().SetBigInt(sharedKey.Y),
+		ff.NewElement().Add(
+			ff.NewElement().SetBigInt(nonce),
+			ff.NewElement().Mul(
+				ff.NewElement().SetUint64(uint64(length)),
+				ff.NewElement().SetBigInt(TWO_128),
+			),
+		),
+	}
+
+	n := len(cipherText) / 3
+
+	for i := 0; i < n; i++ {
+		state = p.poseidonStrategy(state)
+
+		msg = append(msg, ff.NewElement().Sub(ct[i*3], state[1]))
+		msg = append(msg, ff.NewElement().Sub(ct[i*3+1], state[2]))
+		msg = append(msg, ff.NewElement().Sub(ct[i*3+2], state[3]))
+
+		state[1] = ct[i*3]
+		state[2] = ct[i*3+1]
+		state[3] = ct[i*3+2]
+	}
+
+	state = p.poseidonStrategy(state)
+
+	if state[1].Cmp(ct[len(ct)-1]) != 0 {
+		return nil, errors.New("decryption failed")
+	}
+
+	resultInBig := utils.ElementArrayToBigIntArray(msg)
+
+	return resultInBig[:length], nil
+}
+
+func (p *Poseidon) poseidonStrategy(state []*ff.Element) []*ff.Element {
+	N_ROUNDS_P := []int{56, 57, 56, 60, 60, 63, 64, 63}
+	N_ROUNDS_F := 8
+
+	t := len(state)
+	nRoundsF := N_ROUNDS_F
+	nRoundsP := N_ROUNDS_P[t-2]
+
+	for r := 0; r < nRoundsF+nRoundsP; r++ {
+		state = Mapper(state, func(a *ff.Element, i int) *ff.Element {
+			return ff.NewElement().Add(a, ff.NewElement().SetBigInt(utils.NewIntFromString(C()[t-2][r*t+i])))
+		})
+
+		if r < nRoundsF/2 || r >= nRoundsF/2+nRoundsP {
+			state = Mapper(state, func(a *ff.Element, i int) *ff.Element {
+				return ff.NewElement().Exp(*a, big.NewInt(5))
+			})
+		} else {
+			state[0] = ff.NewElement().Exp(*state[0], big.NewInt(5))
 		}
 
-		// Modify the state for the next round
-		// message[1] = subMod(cipherText[i * 3], state[1]);
-		message[i*3] = ff.NewElement().Sub(ff.NewElement().SetBigInt(cipherText[i*3]), ff.NewElement().SetBigInt(state[1])).ToBigIntRegular(state[1])
-		// state[2] = subMod(cipherText[i * 3 + 1], state[2]);
-		message[i*3+1] = ff.NewElement().Sub(ff.NewElement().SetBigInt(cipherText[i*3+1]), ff.NewElement().SetBigInt(state[2])).ToBigIntRegular(state[2])
-		// state[3] = subMod(cipherText[i * 3 + 2], state[3]);
-		message[i*3+2] = ff.NewElement().Sub(ff.NewElement().SetBigInt(cipherText[i*3+2]), ff.NewElement().SetBigInt(state[3])).ToBigIntRegular(state[3])
-
-		state[1] = cipherText[i*3]
-		state[2] = cipherText[i*3+1]
-		state[3] = cipherText[i*3+2]
+		state = Mapper(state, func(b *ff.Element, i int) *ff.Element {
+			acc := Reduce(state, func(j int, acc, a *ff.Element) *ff.Element {
+				return ff.NewElement().Add(acc, ff.NewElement().Mul(ff.NewElement().SetBigInt(utils.NewIntFromString(M()[t-2][i][j])), a))
+			}, ff.NewElement().SetUint64(0))
+			return acc
+		})
 	}
 
-	// If length > 3, check if the last (3 - (l mod 3)) elements of the message are 0
-	// this is a safty check because the message would have been padded with 0s
-	if length > 3 {
-		if length%3 == 2 {
-			if message[len(message)-1].Cmp(big.NewInt(0)) != 0 {
-				return nil, fmt.Errorf("the last element of the decrypted text must be 0")
-			}
-		} else if length%3 == 1 {
-			if message[len(message)-2].Cmp(big.NewInt(0)) != 0 || message[len(message)-1].Cmp(big.NewInt(0)) != 0 {
-				return nil, fmt.Errorf("the last two elements of the decrypted text must be 0")
-			}
-		}
-	}
-
-	// Iterate Poseidon on the state one last time
-	state, err = poseidon.HashEx(state, 4)
-	if err != nil {
-		return nil, err
-	}
-
-	// another satety check. The last element of the cipher text
-	// must match the 2nd element of the state from the last round
-	if state[1].Cmp(cipherText[len(cipherText)-1]) != 0 {
-		return nil, fmt.Errorf("the last element of the cipher text does not match the 2nd element of the state from the last round")
-	}
-
-	return message[:length], nil
+	return state
 }
