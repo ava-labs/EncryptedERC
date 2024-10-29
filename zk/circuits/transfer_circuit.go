@@ -27,7 +27,7 @@ func (circuit *TransferCircuit) Define(api frontend.API) error {
 	CheckBalance(api, babyjub, circuit.Sender)
 
 	// Verify sender's encrypted value is the negated transfer amount
-	CheckNegativeValue(api, babyjub, circuit.Sender, circuit.ValueToTransfer)
+	CheckPositiveValue(api, babyjub, circuit.Sender, circuit.ValueToTransfer)
 
 	// Verify receiver's encrypted value is the transfer amount
 	CheckValue(api, babyjub, circuit.Receiver, circuit.ValueToTransfer)

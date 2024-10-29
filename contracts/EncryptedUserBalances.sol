@@ -23,7 +23,8 @@ contract EncryptedUserBalances {
         returns (
             EGCT memory eGCT,
             uint256 nonce,
-            uint256[7][] memory amountPCTs
+            uint256[7][] memory amountPCTs,
+            uint256[7] memory balancePCT
         )
     {
         return balanceOf(_user, 0);
@@ -45,11 +46,17 @@ contract EncryptedUserBalances {
         returns (
             EGCT memory eGCT,
             uint256 nonce,
-            uint256[7][] memory amountPCTs
+            uint256[7][] memory amountPCTs,
+            uint256[7] memory balancePCT
         )
     {
         EncryptedBalance storage balance = balances[_user][_tokenId];
-        return (balance.eGCT, balance.nonce, balance.amountPCTs);
+        return (
+            balance.eGCT,
+            balance.nonce,
+            balance.amountPCTs,
+            balance.balancePCT
+        );
     }
 
     ///////////////////////////////////////////////////
@@ -80,6 +87,25 @@ contract EncryptedUserBalances {
         balance.amountPCTs.push(_amountPCT);
     }
 
+    function _subtractFromUserBalance(
+        address _user,
+        uint256 _tokenId,
+        EGCT memory _eGCT,
+        uint256[7] memory _balancePCT
+    ) internal {
+        EncryptedBalance storage balance = balances[_user][_tokenId];
+
+        // since we are encrypting the negated amount, we need to add it to the balance
+        balance.eGCT.c1 = BabyJubJub._sub(balance.eGCT.c1, _eGCT.c1);
+        balance.eGCT.c2 = BabyJubJub._sub(balance.eGCT.c2, _eGCT.c2);
+
+        // delete the amount pct from the balance
+        _deleteUserHistory(_user, _tokenId);
+
+        // update balance pct
+        balance.balancePCT = _balancePCT;
+    }
+
     /**
      * @param _user User address
      * @param _tokenId Token ID
@@ -103,19 +129,6 @@ contract EncryptedUserBalances {
         });
 
         balance.nextBalanceIndex++;
-    }
-
-    /**
-     * @param _eGCT Elgamal Ciphertext
-     * @return hash of the Elgamal Ciphertext CRH(eGCT)
-     */
-    function _hashEGCT(EGCT memory _eGCT) internal pure returns (uint256) {
-        return
-            uint256(
-                keccak256(
-                    abi.encode(_eGCT.c1.X, _eGCT.c1.Y, _eGCT.c2.X, _eGCT.c2.Y)
-                )
-            );
     }
 
     /**
@@ -148,6 +161,19 @@ contract EncryptedUserBalances {
 
         // and need to add the new balance hash to the history with the new nonce
         _addToUserHistory(_user, _tokenId);
+    }
+
+    /**
+     * @param _eGCT Elgamal Ciphertext
+     * @return hash of the Elgamal Ciphertext CRH(eGCT)
+     */
+    function _hashEGCT(EGCT memory _eGCT) internal pure returns (uint256) {
+        return
+            uint256(
+                keccak256(
+                    abi.encode(_eGCT.c1.X, _eGCT.c1.Y, _eGCT.c2.X, _eGCT.c2.Y)
+                )
+            );
     }
 
     /**

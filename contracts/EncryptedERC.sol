@@ -5,11 +5,12 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {TokenTracker} from "./TokenTracker.sol";
 import {EncryptedUserBalances} from "./EncryptedUserBalances.sol";
 
-import {CreateEncryptedERCParams, Point, EGCT} from "./types/Types.sol";
+import {CreateEncryptedERCParams, Point, EGCT, EncryptedBalance} from "./types/Types.sol";
 import {UserNotRegistered, UnauthorizedAccess, AuditorKeyNotSet, InvalidProof, InvalidOperation} from "./errors/Errors.sol";
 
 import {IRegistrar} from "./interfaces/IRegistrar.sol";
 import {IMintVerifier} from "./interfaces/verifiers/IMintVerifier.sol";
+import {IBurnVerifier} from "./interfaces/verifiers/IBurnVerifier.sol";
 
 contract EncryptedERC is TokenTracker, Ownable, EncryptedUserBalances {
     // registrar contract
@@ -17,6 +18,7 @@ contract EncryptedERC is TokenTracker, Ownable, EncryptedUserBalances {
 
     // verifiers
     IMintVerifier public mintVerifier;
+    IBurnVerifier public burnVerifier;
 
     // token name and symbol
     string public name;
@@ -41,6 +43,7 @@ contract EncryptedERC is TokenTracker, Ownable, EncryptedUserBalances {
         }
 
         mintVerifier = IMintVerifier(params._mintVerifier);
+        burnVerifier = IBurnVerifier(params._burnVerifier);
     }
 
     ///////////////////////////////////////////////////
@@ -64,6 +67,13 @@ contract EncryptedERC is TokenTracker, Ownable, EncryptedUserBalances {
      */
     event PrivateMint(address indexed user, uint256[7] auditorPCT);
 
+    /**
+     * @param user Address of the user
+     * @param auditorPCT Auditor PCT
+     * @dev Emitted when a private burn is done
+     */
+    event PrivateBurn(address indexed user, uint256[7] auditorPCT);
+
     ///////////////////////////////////////////////////
     ///                   Public                    ///
     ///////////////////////////////////////////////////
@@ -80,6 +90,10 @@ contract EncryptedERC is TokenTracker, Ownable, EncryptedUserBalances {
     ) external onlyOwner {
         if (!isAuditorKeySet()) {
             revert AuditorKeyNotSet();
+        }
+
+        if (!registrar.isUserRegistered(_user)) {
+            revert UserNotRegistered();
         }
 
         {
@@ -102,6 +116,44 @@ contract EncryptedERC is TokenTracker, Ownable, EncryptedUserBalances {
 
         mintVerifier.verifyProof(proof, input);
         _privateMint(_user, input);
+    }
+
+    /**
+     * @param proof Proof
+     * @param input Public inputs
+     */
+    function privateBurn(
+        uint256[8] calldata proof,
+        uint256[19] calldata input,
+        uint256[7] calldata _balancePCT
+    ) external {
+        address _user = msg.sender;
+
+        if (!registrar.isUserRegistered(_user)) {
+            revert UserNotRegistered();
+        }
+
+        {
+            // user public key should match
+            uint256[2] memory userPublicKey = registrar.getUserPublicKey(_user);
+            if (userPublicKey[0] != input[0] || userPublicKey[1] != input[1]) {
+                revert InvalidProof();
+            }
+        }
+
+        {
+            // auditor public key should match
+            if (
+                auditorPublicKey.X != input[10] ||
+                auditorPublicKey.Y != input[11]
+            ) {
+                revert InvalidProof();
+            }
+        }
+
+        burnVerifier.verifyProof(proof, input);
+
+        _privateBurn(_user, input, _balancePCT);
     }
 
     /**
@@ -134,6 +186,11 @@ contract EncryptedERC is TokenTracker, Ownable, EncryptedUserBalances {
     ///////////////////////////////////////////////////
     ///                   Internal                 ///
     ///////////////////////////////////////////////////
+
+    /**
+     * @param _user Address of the user
+     * @param input Proof input
+     */
     function _privateMint(address _user, uint256[22] calldata input) internal {
         if (isConverter) {
             revert InvalidOperation();
@@ -157,5 +214,39 @@ contract EncryptedERC is TokenTracker, Ownable, EncryptedUserBalances {
         _addToUserBalance(_user, tokenId, eGCT, _amountPCT);
 
         emit PrivateMint(_user, _auditorPCT);
+    }
+
+    /**
+     * @param _user Address of the user
+     * @param input Proof input
+     * @param _balancePCT Balance PCT
+     */
+    function _privateBurn(
+        address _user,
+        uint256[19] calldata input,
+        uint256[7] calldata _balancePCT
+    ) internal {
+        EGCT memory providedBalance = EGCT({
+            c1: Point({X: input[2], Y: input[3]}),
+            c2: Point({X: input[4], Y: input[5]})
+        });
+
+        uint256 balanceHash = _hashEGCT(providedBalance);
+        if (!_isBalanceValid(_user, 0, balanceHash)) {
+            revert InvalidProof();
+        }
+
+        EGCT memory encryptedBurnAmount = EGCT({
+            c1: Point({X: input[6], Y: input[7]}),
+            c2: Point({X: input[8], Y: input[9]})
+        });
+        _subtractFromUserBalance(_user, 0, encryptedBurnAmount, _balancePCT);
+
+        uint256[7] memory auditorPCT;
+        for (uint256 i = 0; i < 7; i++) {
+            auditorPCT[i] = input[12 + i];
+        }
+
+        emit PrivateBurn(_user, auditorPCT);
     }
 }

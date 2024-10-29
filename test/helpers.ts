@@ -3,12 +3,15 @@ import fs from "node:fs";
 import path from "node:path";
 import util from "node:util";
 import type { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/dist/src/signer-with-address";
+import { formatPrivKeyForBabyJub } from "maci-crypto";
 import { encryptMessage, processPoseidonEncryption } from "../src/jub/jub";
 import { BabyJubJub__factory } from "../typechain-types/factories/contracts/libraries";
 import {
+	BurnVerifier__factory,
 	MintVerifier__factory,
 	RegistrationVerifier__factory,
 } from "../typechain-types/factories/contracts/verifiers";
+import type { User } from "./user";
 
 const execAsync = util.promisify(exec);
 
@@ -21,9 +24,14 @@ export const deployVerifiers = async (signer: SignerWithAddress) => {
 	const mintVerifier = await mintVerifierFactory.deploy();
 	await mintVerifier.waitForDeployment();
 
+	const burnVerifierFactory = new BurnVerifier__factory(signer);
+	const burnVerifier = await burnVerifierFactory.deploy();
+	await burnVerifier.waitForDeployment();
+
 	return {
 		registrationVerifier: registrationVerifier.target.toString(),
 		mintVerifier: mintVerifier.target.toString(),
+		burnVerifier: burnVerifier.target.toString(),
 	};
 };
 
@@ -60,6 +68,10 @@ export const generateGnarkProof = async (
 		case "MINT":
 			pkPath = path.join(__dirname, "../", "build", "mint.pk");
 			csPath = path.join(__dirname, "../", "build", "mint.r1cs");
+			break;
+		case "BURN":
+			pkPath = path.join(__dirname, "../", "build", "burn.pk");
+			csPath = path.join(__dirname, "../", "build", "burn.r1cs");
 			break;
 		default:
 			break;
@@ -136,4 +148,68 @@ export const privateMint = async (
 	const proof = await generateGnarkProof("MINT", JSON.stringify(input));
 
 	return { proof, publicInputs };
+};
+
+export const privateBurn = async (
+	amount: bigint,
+	user: User,
+	userEncryptedBalance: bigint[],
+	userBalance: bigint,
+	auditorPublicKey: bigint[],
+) => {
+	const newBalance = userBalance - amount;
+	const userPublicKey = user.publicKey;
+
+	// 1. encrypt the negated burn amount with el-gamal
+	const { cipher: encryptedAmount } = encryptMessage(userPublicKey, amount);
+
+	// 2. create pct for the user with the newly calculated balance
+	const {
+		ciphertext: userCiphertext,
+		nonce: userNonce,
+		authKey: userAuthKey,
+	} = processPoseidonEncryption([newBalance], userPublicKey);
+
+	// 3. create pct for the auditor with the burn amount
+	const {
+		ciphertext: auditorCiphertext,
+		nonce: auditorNonce,
+		encRandom: auditorEncRandom,
+		authKey: auditorAuthKey,
+	} = processPoseidonEncryption([amount], auditorPublicKey);
+
+	const publicInputs = [
+		...userPublicKey.map(String),
+		...userEncryptedBalance.map(String),
+		...encryptedAmount[0].map(String),
+		...encryptedAmount[1].map(String),
+		...auditorPublicKey.map(String),
+		...auditorCiphertext.map(String),
+		...auditorAuthKey.map(String),
+		auditorNonce.toString(),
+	];
+
+	const privateInputs = [
+		formatPrivKeyForBabyJub(user.privateKey).toString(),
+		userBalance.toString(),
+		auditorEncRandom.toString(),
+		amount.toString(),
+	];
+
+	const input = {
+		privateInputs,
+		publicInputs,
+	};
+
+	const proof = await generateGnarkProof("BURN", JSON.stringify(input));
+
+	return {
+		proof,
+		publicInputs,
+		userBalancePCT: [
+			...userCiphertext.map(String),
+			...userAuthKey.map(String),
+			userNonce.toString(),
+		],
+	};
 };

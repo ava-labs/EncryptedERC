@@ -13,6 +13,7 @@ struct CreateEncryptedERCParams {
     string _symbol;
     // verifiers
     address _mintVerifier;
+    address _burnVerifier;
 }
 
 struct EncryptedBalance {

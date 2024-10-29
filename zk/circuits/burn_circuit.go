@@ -26,7 +26,7 @@ func (circuit *BurnCircuit) Define(api frontend.API) error {
 	CheckBalance(api, babyjub, circuit.Sender)
 
 	// Verify sender's encrypted value is the negated burn amount
-	CheckNegativeValue(api, babyjub, circuit.Sender, circuit.ValueToBurn)
+	CheckPositiveValue(api, babyjub, circuit.Sender, circuit.ValueToBurn)
 
 	// Verify auditor's encrypted summary includes the burn amount and is encrypted with the auditor's public key
 	CheckPCTAuditor(api, babyjub, circuit.Auditor, circuit.ValueToBurn)

@@ -32,15 +32,6 @@ func CheckBalance(api frontend.API, bj *babyjub.BjWrapper, sender Sender) {
 }
 
 /*
-CheckNegativeValue verifies if the sender's value is the encryption of the negative of the given value by decryption
-*/
-func CheckNegativeValue(api frontend.API, bj *babyjub.BjWrapper, sender Sender, value frontend.Variable) {
-	negativeValueP := bj.MulWithBasePoint(api.Neg(value))
-	decSenderValueP := bj.ElGamalDecrypt([2]frontend.Variable{sender.ValueEGCT.C1.X, sender.ValueEGCT.C1.Y}, [2]frontend.Variable{sender.ValueEGCT.C2.X, sender.ValueEGCT.C2.Y}, sender.PrivateKey)
-	bj.AssertPoint(negativeValueP, decSenderValueP.X, decSenderValueP.Y)
-}
-
-/*
 CheckPositiveValue verifies if the sender's value is the encryption of the given value by decryption
 */
 func CheckPositiveValue(api frontend.API, bj *babyjub.BjWrapper, sender Sender, value frontend.Variable) {

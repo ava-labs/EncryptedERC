@@ -1,5 +1,5 @@
 import type { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/dist/src/signer-with-address";
-import { expect } from "chai";
+import { expect, use } from "chai";
 import { ethers } from "hardhat";
 import type { Registrar } from "../typechain-types/contracts/Registrar";
 import {
@@ -15,6 +15,7 @@ import {
 	deployLibrary,
 	deployVerifiers,
 	generateGnarkProof,
+	privateBurn,
 	privateMint,
 } from "./helpers";
 import { User } from "./user";
@@ -30,7 +31,8 @@ describe("EncryptedERC", () => {
 		signers = await ethers.getSigners();
 		owner = signers[0];
 
-		const { registrationVerifier, mintVerifier } = await deployVerifiers(owner);
+		const { registrationVerifier, mintVerifier, burnVerifier } =
+			await deployVerifiers(owner);
 		const babyJubJub = await deployLibrary(owner);
 
 		const registrarFactory = new Registrar__factory(owner);
@@ -49,6 +51,7 @@ describe("EncryptedERC", () => {
 			_name: "Test",
 			_symbol: "TEST",
 			_mintVerifier: mintVerifier,
+			_burnVerifier: burnVerifier,
 		});
 
 		await encryptedERC_.waitForDeployment();
@@ -117,6 +120,7 @@ describe("EncryptedERC", () => {
 
 	describe("EncryptedERC", () => {
 		let auditorPublicKey: [bigint, bigint];
+		let userBalance = 0n;
 
 		it("should initialize properly", async () => {
 			expect(encryptedERC.target).to.not.be.null;
@@ -173,7 +177,7 @@ describe("EncryptedERC", () => {
 		});
 
 		describe("Private Mint", () => {
-			const mintAmount = 1000n;
+			const mintAmount = 10000n;
 
 			it("after auditor key is set, only owner should be able to mint", async () => {
 				const receiver = users[0];
@@ -220,6 +224,65 @@ describe("EncryptedERC", () => {
 				);
 
 				expect(decrypted).to.deep.equal([mintAmount]);
+
+				userBalance = decrypted[0];
+			});
+		});
+
+		describe("Private Burn", () => {
+			const burnAmount = 100n;
+
+			it("should burn properly", async () => {
+				const user = users[0];
+				const balance = await encryptedERC.balanceOfStandalone(
+					user.signer.address,
+				);
+
+				const userEncryptedBalance = [...balance.eGCT.c1, ...balance.eGCT.c2];
+
+				const { proof, publicInputs, userBalancePCT } = await privateBurn(
+					burnAmount,
+					user,
+					userEncryptedBalance,
+					userBalance,
+					auditorPublicKey,
+				);
+
+				await encryptedERC.privateBurn(proof, publicInputs, userBalancePCT);
+			});
+
+			it("users balance pct and elgamal ciphertext should be updated properly", async () => {
+				const user = users[0];
+				const balance = await encryptedERC.balanceOfStandalone(
+					user.signer.address,
+				);
+
+				const decryptedBalance = decryptPoint(
+					user.privateKey,
+					balance.eGCT.c1,
+					balance.eGCT.c2,
+				);
+
+				const expectedPoint = mulPointEscalar(Base8, userBalance - burnAmount);
+
+				expect(decryptedBalance).to.deep.equal(expectedPoint);
+
+				const balancePCT = balance.balancePCT;
+				const ciphertext = balancePCT.slice(0, 4);
+				const authKey = balancePCT.slice(4, 6);
+				const nonce = balancePCT[6];
+
+				const decrypted = processPoseidonDecryption(
+					ciphertext,
+					authKey,
+					nonce,
+					user.privateKey,
+					1,
+				);
+
+				expect(decrypted).to.deep.equal([userBalance - burnAmount]);
+
+				userBalance = decrypted[0];
 			});
 		});
 	});
