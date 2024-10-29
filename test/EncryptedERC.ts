@@ -8,13 +8,8 @@ import {
 } from "../typechain-types/factories/contracts";
 
 import { Base8, mulPointEscalar } from "@zk-kit/baby-jubjub";
-import { formatPrivKeyForBabyJub, poseidonEncrypt } from "maci-crypto";
-import {
-	decryptPoint,
-	encryptMessage,
-	processPoseidonDecryption,
-	processPoseidonEncryption,
-} from "../src/jub/jub";
+import { formatPrivKeyForBabyJub } from "maci-crypto";
+import { decryptPoint, processPoseidonDecryption } from "../src/jub/jub";
 import type { EncryptedERC } from "../typechain-types/contracts/EncryptedERC";
 import {
 	deployLibrary,
