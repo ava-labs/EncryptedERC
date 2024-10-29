@@ -30,7 +30,7 @@ contract Registrar is Ownable {
      */
     event Register(address indexed user, Point publicKey);
 
-    // function register(registerProof memory _proof) external;
+    // TODO(@mberatoz): pass the proof as a parameter
     function register() external {
         address account = _msgSender();
 
