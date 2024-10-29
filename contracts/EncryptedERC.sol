@@ -64,6 +64,15 @@ contract EncryptedERC is TokenTracker, Ownable, EncryptedUserBalances {
      */
     event PrivateMint(address indexed user, uint256[7] auditorPCT);
 
+    ///////////////////////////////////////////////////
+    ///                   Public                    ///
+    ///////////////////////////////////////////////////
+
+    /**
+     * @param _user Address of the user
+     * @param proof Proof
+     * @param input Proof input
+     */
     function privateMint(
         address _user,
         uint256[8] calldata proof,

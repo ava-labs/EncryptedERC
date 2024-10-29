@@ -50,6 +50,8 @@ func main() {
 		hardhat.Register(pp)
 	case "MINT":
 		hardhat.Mint(pp)
+	case "BURN":
+		hardhat.Burn(pp)
 	}
 
 	// switch *operation {
