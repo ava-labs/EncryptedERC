@@ -2,25 +2,25 @@
 pragma solidity 0.8.27;
 
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
-import {Point, UserPublicKey} from "./types/Types.sol";
+import {Point} from "./types/Types.sol";
 import {UserAlreadyRegistered} from "./errors/Errors.sol";
 
 // import {Point, User, RegisterProof} from "./structs/Structs.sol";
 // import {IRegisterVerifier} from "./interfaces/IRegisterVerifier.sol";
 // import {DuplicatePublicKey, InvalidProof} from "./errors/Errors.sol";
 
-contract Registrar is Ownable {
+contract Registrar {
     address public constant BURN_USER =
         0x1111111111111111111111111111111111111111;
 
     /**
      * @dev Mapping of user addresses to their public keys
      */
-    mapping(address userAddress => UserPublicKey userPublicKey) public users;
+    mapping(address userAddress => Point userPublicKey) public userPublicKeys;
 
-    constructor() Ownable(msg.sender) {
+    constructor() {
         // setting burn user to the identity point (0, 1)
-        users[BURN_USER] = UserPublicKey({publicKey: Point({X: 0, Y: 1})});
+        userPublicKeys[BURN_USER] = Point({X: 0, Y: 1});
     }
 
     /**
@@ -32,7 +32,7 @@ contract Registrar is Ownable {
 
     // TODO(@mberatoz): pass the proof as a parameter
     function register() external {
-        address account = _msgSender();
+        address account = msg.sender;
 
         // TODO(@mberatoz): verify the proof
 
@@ -52,7 +52,7 @@ contract Registrar is Ownable {
      * @dev Internal function for setting user public key
      */
     function _register(address _user, Point memory _publicKey) internal {
-        users[_user] = UserPublicKey({publicKey: _publicKey});
+        userPublicKeys[_user] = _publicKey;
         emit Register(_user, _publicKey);
     }
 
@@ -63,6 +63,18 @@ contract Registrar is Ownable {
      * @return bool True if the user is registered
      */
     function isUserRegistered(address _user) public view returns (bool) {
-        return users[_user].publicKey.X != 0 && users[_user].publicKey.Y != 0;
+        return userPublicKeys[_user].X != 0 && userPublicKeys[_user].Y != 0;
+    }
+
+    /**
+     *
+     * @param _user Address of the user
+     *
+     * @return publicKey Public key of the user as [x, y] coordinates
+     */
+    function getUserPublicKey(
+        address _user
+    ) public view returns (uint256[2] memory publicKey) {
+        return [userPublicKeys[_user].X, userPublicKeys[_user].Y];
     }
 }
