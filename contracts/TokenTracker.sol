@@ -21,4 +21,14 @@ contract TokenTracker {
     function getTokens() external view returns (address[] memory) {
         return tokens;
     }
+
+    /**
+     * @param _tokenAddress Address of the token
+     * @dev Adds a token to the tracker
+     */
+    function _addToken(address _tokenAddress) internal {
+        tokenIds[_tokenAddress] = nextTokenId;
+        tokens.push(_tokenAddress);
+        nextTokenId++;
+    }
 }

@@ -3,12 +3,13 @@ pragma solidity 0.8.27;
 
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {TokenTracker} from "./TokenTracker.sol";
+import {EncryptedUserBalances} from "./EncryptedUserBalances.sol";
 
 import {IRegistrar} from "./interfaces/IRegistrar.sol";
 import {CreateEncryptedERCParams, Point} from "./types/Types.sol";
 import {UserNotRegistered} from "./errors/Errors.sol";
 
-contract EncryptedERC is TokenTracker, Ownable {
+contract EncryptedERC is TokenTracker, Ownable, EncryptedUserBalances {
     // registrar contract
     IRegistrar public registrar;
 

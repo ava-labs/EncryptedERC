@@ -3,7 +3,7 @@ pragma solidity 0.8.27;
 
 import {EncryptedBalance, EGCT, BalanceHistory} from "./types/Types.sol";
 
-contract EncryptedUserBalance {
+contract EncryptedUserBalances {
     mapping(address user => mapping(uint256 tokenId => EncryptedBalance balance))
         public balances;
 
