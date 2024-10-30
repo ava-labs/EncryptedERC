@@ -6,6 +6,7 @@
 		"@openzeppelin/contracts": "^5.1.0",
 		"@zk-kit/baby-jubjub": "^1.0.3",
 		"hardhat": "^2.22.15",
+		"hardhat-gas-reporter": "^2.2.1",
 		"maci-crypto": "^1.2.2"
 	},
 	"scripts": {

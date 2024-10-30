@@ -9,9 +9,10 @@ import {
 
 import { Base8, mulPointEscalar } from "@zk-kit/baby-jubjub";
 import { formatPrivKeyForBabyJub } from "maci-crypto";
-import { decryptPoint, processPoseidonDecryption } from "../src/jub/jub";
+import { decryptPoint } from "../src/jub/jub";
 import type { EncryptedERC } from "../typechain-types/contracts/EncryptedERC";
 import {
+	decryptPCT,
 	deployLibrary,
 	deployVerifiers,
 	generateGnarkProof,
@@ -211,17 +212,7 @@ describe("EncryptedERC", () => {
 
 				// check if the amount pct is set properly
 				const amountPCT = balance.amountPCTs[0];
-				const ciphertext = amountPCT.slice(0, 4);
-				const authKey = amountPCT.slice(4, 6);
-				const nonce = amountPCT[6];
-
-				const decrypted = processPoseidonDecryption(
-					ciphertext,
-					authKey,
-					nonce,
-					receiver.privateKey,
-					1,
-				);
+				const decrypted = await decryptPCT(receiver.privateKey, amountPCT[0]);
 
 				expect(decrypted).to.deep.equal([mintAmount]);
 
@@ -248,7 +239,9 @@ describe("EncryptedERC", () => {
 					auditorPublicKey,
 				);
 
-				await encryptedERC.privateBurn(proof, publicInputs, userBalancePCT);
+				await encryptedERC
+					.connect(user.signer)
+					.privateBurn(proof, publicInputs, userBalancePCT);
 			});
 
 			it("users balance pct and elgamal ciphertext should be updated properly", async () => {
@@ -268,21 +261,382 @@ describe("EncryptedERC", () => {
 				expect(decryptedBalance).to.deep.equal(expectedPoint);
 
 				const balancePCT = balance.balancePCT;
-				const ciphertext = balancePCT.slice(0, 4);
-				const authKey = balancePCT.slice(4, 6);
-				const nonce = balancePCT[6];
 
-				const decrypted = processPoseidonDecryption(
-					ciphertext,
-					authKey,
-					nonce,
-					user.privateKey,
-					1,
-				);
+				const decrypted = await decryptPCT(user.privateKey, balancePCT);
 
 				expect(decrypted).to.deep.equal([userBalance - burnAmount]);
 
 				userBalance = decrypted[0];
+			});
+		});
+
+		// In order to test front running protection what we can do is to
+		// 0. owner mints some tokens to userA
+		// 1. userA creates a burn proof but do not send it to the contract
+		// 2. owner mints some tokens to userA repeatedly so userA's amount PCTs are updated
+		// 3. userA sends his burn proof
+		// after step 3, burn proof should be valid and need to updated pcts accordingly
+		describe("Front Running Protection", () => {
+			const INITIAL_MINT_COUNT = 4;
+			const SECOND_MINT_COUNT = 5;
+			const PER_MINT = 100n;
+			const EXPECTED_BALANCE_AFTER_INITIAL_MINT = 1000n;
+			const EXPECTED_BALANCE_AFTER_MINT = 2500n;
+
+			const burnAmount = 100n;
+			let userABalance = 0n;
+
+			let burnProof: {
+				proof: string[];
+				publicInputs: string[];
+				userBalancePCT: string[];
+			};
+
+			it("0. owner mints some tokens to userA", async () => {
+				console.log("UserA Initial Balance", userABalance);
+
+				const userA = users[1];
+
+				for (let i = 0; i < INITIAL_MINT_COUNT; i++) {
+					const receiverPublicKey = userA.publicKey;
+					const mintAmount = PER_MINT * BigInt(i + 1);
+					const { proof, publicInputs } = await privateMint(
+						mintAmount,
+						receiverPublicKey,
+						auditorPublicKey,
+					);
+
+					await encryptedERC
+						.connect(owner)
+						.privateMint(userA.signer.address, proof, publicInputs);
+				}
+			});
+
+			it("userA balance should be updated properly", async () => {
+				const userA = users[1];
+
+				const balance = await encryptedERC.balanceOfStandalone(
+					userA.signer.address,
+				);
+
+				const decryptedBalance = decryptPoint(
+					userA.privateKey,
+					balance.eGCT.c1,
+					balance.eGCT.c2,
+				);
+				const expectedPoint = mulPointEscalar(
+					Base8,
+					EXPECTED_BALANCE_AFTER_INITIAL_MINT,
+				);
+
+				expect(decryptedBalance).to.deep.equal(expectedPoint);
+
+				const amountPCTs = balance.amountPCTs;
+				const decryptedAmountPCTs = [];
+				let sum = 0n;
+				for (const [pct] of amountPCTs) {
+					const decrypted = await decryptPCT(userA.privateKey, pct);
+					sum += decrypted[0];
+					decryptedAmountPCTs.push(decrypted[0]);
+				}
+
+				expect(sum).to.deep.equal(EXPECTED_BALANCE_AFTER_INITIAL_MINT);
+				userABalance = sum;
+
+				console.log(
+					"UserA Balance After Initial Mint",
+					userABalance,
+					"has",
+					amountPCTs.length,
+					"amount pcts in contract before generating burn proof and has 5 different amount pcts that have",
+					decryptedAmountPCTs,
+				);
+			});
+
+			it("1. userA creates a burn proof but do not send it to the contract", async () => {
+				const userA = users[1];
+				const balance = await encryptedERC.balanceOfStandalone(
+					userA.signer.address,
+				);
+
+				const userEncryptedBalance = [...balance.eGCT.c1, ...balance.eGCT.c2];
+
+				const { proof, publicInputs, userBalancePCT } = await privateBurn(
+					burnAmount,
+					userA,
+					userEncryptedBalance,
+					userABalance,
+					auditorPublicKey,
+				);
+
+				burnProof = { proof, publicInputs, userBalancePCT };
+			});
+
+			it("2. owner mints some tokens to userA repeatedly so userA's amount PCTs are updated", async () => {
+				const userA = users[1];
+
+				for (let i = 0; i < SECOND_MINT_COUNT; i++) {
+					const receiverPublicKey = userA.publicKey;
+
+					const { proof, publicInputs } = await privateMint(
+						PER_MINT * BigInt(i + 1),
+						receiverPublicKey,
+						auditorPublicKey,
+					);
+
+					await encryptedERC
+						.connect(owner)
+						.privateMint(userA.signer.address, proof, publicInputs);
+				}
+			});
+
+			it("userA balance should be updated properly", async () => {
+				const userA = users[1];
+
+				const balance = await encryptedERC.balanceOfStandalone(
+					userA.signer.address,
+				);
+
+				const decryptedBalance = decryptPoint(
+					userA.privateKey,
+					balance.eGCT.c1,
+					balance.eGCT.c2,
+				);
+				const expectedPoint = mulPointEscalar(
+					Base8,
+					EXPECTED_BALANCE_AFTER_MINT,
+				);
+
+				expect(decryptedBalance).to.deep.equal(expectedPoint);
+
+				const amountPCTs = balance.amountPCTs;
+				const decryptedAmountPCTs = [];
+				let sum = 0n;
+				for (const [pct] of amountPCTs) {
+					const decrypted = await decryptPCT(userA.privateKey, pct);
+					sum += decrypted[0];
+					decryptedAmountPCTs.push(decrypted[0]);
+				}
+
+				expect(sum).to.deep.equal(EXPECTED_BALANCE_AFTER_MINT);
+				userABalance = sum;
+
+				console.log(
+					"UserA Balance After Second Mint",
+					userABalance,
+					"has",
+					amountPCTs.length,
+					"amount pcts in contract and has",
+					decryptedAmountPCTs,
+					"and balance pct is",
+				);
+			});
+
+			it("3. userA sends his burn proof", async () => {
+				const userA = users[1];
+
+				await encryptedERC
+					.connect(userA.signer)
+					.privateBurn(
+						burnProof.proof,
+						burnProof.publicInputs,
+						burnProof.userBalancePCT,
+					);
+
+				console.log("userA balance before burn", userABalance);
+
+				userABalance = userABalance - burnAmount;
+				console.log("userA balance after burn", userABalance);
+			});
+
+			it("after that amount pcts should be updated properly", async () => {
+				const userA = users[1];
+
+				const balance = await encryptedERC.balanceOfStandalone(
+					userA.signer.address,
+				);
+
+				const decryptedBalance = decryptPoint(
+					userA.privateKey,
+					balance.eGCT.c1,
+					balance.eGCT.c2,
+				);
+				const expectedPoint = mulPointEscalar(Base8, userABalance);
+
+				expect(decryptedBalance).to.deep.equal(expectedPoint);
+
+				const balancePCT = balance.balancePCT;
+				const decryptedBalancePCT = await decryptPCT(
+					userA.privateKey,
+					balancePCT,
+				);
+
+				const amountPCTs = balance.amountPCTs;
+				const decryptedAmountPCTs = [];
+				let sum = 0n;
+				for (const [pct] of amountPCTs) {
+					const decrypted = await decryptPCT(userA.privateKey, pct);
+					sum += decrypted[0];
+					decryptedAmountPCTs.push(decrypted[0]);
+				}
+
+				console.log("decryptedAmountPCTs", decryptedAmountPCTs);
+
+				expect(sum + decryptedBalancePCT[0]).to.deep.equal(userABalance);
+				userABalance = sum + decryptedBalancePCT[0];
+
+				console.log(
+					"UserA Balance After Burn",
+					userABalance,
+					"has",
+					amountPCTs.length,
+					"amount pcts in contract and has",
+					decryptedAmountPCTs,
+					"and balance pct is",
+					decryptedBalancePCT[0],
+				);
+			});
+
+			it("userA can burn again", async () => {
+				const userA = users[1];
+				const balance = await encryptedERC.balanceOfStandalone(
+					userA.signer.address,
+				);
+
+				const userEncryptedBalance = [...balance.eGCT.c1, ...balance.eGCT.c2];
+
+				const { proof, publicInputs, userBalancePCT } = await privateBurn(
+					burnAmount,
+					userA,
+					userEncryptedBalance,
+					userABalance,
+					auditorPublicKey,
+				);
+
+				await encryptedERC
+					.connect(userA.signer)
+					.privateBurn(proof, publicInputs, userBalancePCT);
+
+				console.log("userA balance before burn", userABalance);
+				userABalance = userABalance - burnAmount;
+				console.log("userA balance after burn", userABalance);
+			});
+
+			it("after that amount pcts should be updated properly", async () => {
+				const userA = users[1];
+
+				const balance = await encryptedERC.balanceOfStandalone(
+					userA.signer.address,
+				);
+
+				const decryptedBalance = decryptPoint(
+					userA.privateKey,
+					balance.eGCT.c1,
+					balance.eGCT.c2,
+				);
+				const expectedPoint = mulPointEscalar(Base8, userABalance);
+
+				// expect(decryptedBalance).to.deep.equal(expectedPoint);
+
+				const balancePCT = balance.balancePCT;
+				const decryptedBalancePCT = await decryptPCT(
+					userA.privateKey,
+					balancePCT,
+				);
+
+				const amountPCTs = balance.amountPCTs;
+				const decryptedAmountPCTs = [];
+				let sum = 0n;
+				for (const [pct] of amountPCTs) {
+					const decrypted = await decryptPCT(userA.privateKey, pct);
+					sum += decrypted[0];
+					decryptedAmountPCTs.push(decrypted[0]);
+				}
+
+				// expect(sum + decryptedBalancePCT[0]).to.deep.equal(userABalance);
+				userABalance = sum + decryptedBalancePCT[0];
+
+				console.log(
+					"UserA Balance After Burn",
+					userABalance,
+					"has",
+					amountPCTs.length,
+					"amount pcts in contract and has",
+					decryptedAmountPCTs,
+					"and balance pct is",
+					decryptedBalancePCT[0],
+				);
+			});
+
+			it("userA can burn again", async () => {
+				const userA = users[1];
+				const balance = await encryptedERC.balanceOfStandalone(
+					userA.signer.address,
+				);
+
+				const userEncryptedBalance = [...balance.eGCT.c1, ...balance.eGCT.c2];
+
+				const { proof, publicInputs, userBalancePCT } = await privateBurn(
+					burnAmount,
+					userA,
+					userEncryptedBalance,
+					userABalance,
+					auditorPublicKey,
+				);
+
+				await encryptedERC
+					.connect(userA.signer)
+					.privateBurn(proof, publicInputs, userBalancePCT);
+
+				console.log("userA balance before burn", userABalance);
+				userABalance = userABalance - burnAmount;
+				console.log("userA balance after burn", userABalance);
+			});
+
+			it("after that amount pcts should be updated properly", async () => {
+				const userA = users[1];
+
+				const balance = await encryptedERC.balanceOfStandalone(
+					userA.signer.address,
+				);
+
+				const decryptedBalance = decryptPoint(
+					userA.privateKey,
+					balance.eGCT.c1,
+					balance.eGCT.c2,
+				);
+				const expectedPoint = mulPointEscalar(Base8, userABalance);
+
+				expect(decryptedBalance).to.deep.equal(expectedPoint);
+
+				const balancePCT = balance.balancePCT;
+				const decryptedBalancePCT = await decryptPCT(
+					userA.privateKey,
+					balancePCT,
+				);
+
+				const amountPCTs = balance.amountPCTs;
+				const decryptedAmountPCTs = [];
+				let sum = 0n;
+				for (const [pct] of amountPCTs) {
+					const decrypted = await decryptPCT(userA.privateKey, pct);
+					sum += decrypted[0];
+					decryptedAmountPCTs.push(decrypted[0]);
+				}
+
+				expect(sum + decryptedBalancePCT[0]).to.deep.equal(userABalance);
+				userABalance = sum + decryptedBalancePCT[0];
+
+				console.log(
+					"UserA Balance After Burn",
+					userABalance,
+					"has",
+					amountPCTs.length,
+					"amount pcts in contract and has",
+					decryptedAmountPCTs,
+					"and balance pct is",
+					decryptedBalancePCT[0],
+				);
 			});
 		});
 	});

@@ -4,7 +4,11 @@ import path from "node:path";
 import util from "node:util";
 import type { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/dist/src/signer-with-address";
 import { formatPrivKeyForBabyJub } from "maci-crypto";
-import { encryptMessage, processPoseidonEncryption } from "../src/jub/jub";
+import {
+	encryptMessage,
+	processPoseidonDecryption,
+	processPoseidonEncryption,
+} from "../src/jub/jub";
 import { BabyJubJub__factory } from "../typechain-types/factories/contracts/libraries";
 import {
 	BurnVerifier__factory,
@@ -83,7 +87,6 @@ export const generateGnarkProof = async (
 	const cmd = `${executable} --operation ${type} --input '${input}' --pk ${pkPath} --cs ${csPath} --output ${outputPath}`;
 
 	const { stderr: err, stdout } = await execAsync(cmd);
-	console.log(stdout);
 
 	if (err) throw new Error(err);
 
@@ -212,4 +215,24 @@ export const privateBurn = async (
 			userNonce.toString(),
 		],
 	};
+};
+
+export const decryptPCT = async (
+	privateKey: bigint,
+	pct: bigint[],
+	length = 1,
+) => {
+	const ciphertext = pct.slice(0, 4);
+	const authKey = pct.slice(4, 6);
+	const nonce = pct[6];
+
+	const decrypted = processPoseidonDecryption(
+		ciphertext,
+		authKey,
+		nonce,
+		privateKey,
+		length,
+	);
+
+	return decrypted;
 };

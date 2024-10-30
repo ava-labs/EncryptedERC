@@ -28,8 +28,8 @@ contract EncryptedERC is TokenTracker, Ownable, EncryptedUserBalances {
     uint256 public constant decimals = 2;
 
     // auditor
-    Point public auditorPublicKey;
-    address public auditor;
+    Point public auditorPublicKey = Point({X: 0, Y: 0});
+    address public auditor = address(0);
 
     constructor(
         CreateEncryptedERCParams memory params
@@ -180,7 +180,7 @@ contract EncryptedERC is TokenTracker, Ownable, EncryptedUserBalances {
      * @return bool returns true if the auditor public key is set
      */
     function isAuditorKeySet() public view returns (bool) {
-        return auditorPublicKey.X != 0 && auditorPublicKey.Y != 0;
+        return auditorPublicKey.X != 0 && auditorPublicKey.Y != 1;
     }
 
     ///////////////////////////////////////////////////
@@ -232,7 +232,12 @@ contract EncryptedERC is TokenTracker, Ownable, EncryptedUserBalances {
         });
 
         uint256 balanceHash = _hashEGCT(providedBalance);
-        if (!_isBalanceValid(_user, 0, balanceHash)) {
+        (bool isValid, uint256 transactionIndex) = _isBalanceValid(
+            _user,
+            0,
+            balanceHash
+        );
+        if (!isValid) {
             revert InvalidProof();
         }
 
@@ -240,7 +245,14 @@ contract EncryptedERC is TokenTracker, Ownable, EncryptedUserBalances {
             c1: Point({X: input[6], Y: input[7]}),
             c2: Point({X: input[8], Y: input[9]})
         });
-        _subtractFromUserBalance(_user, 0, encryptedBurnAmount, _balancePCT);
+
+        _subtractFromUserBalance(
+            _user,
+            0,
+            encryptedBurnAmount,
+            _balancePCT,
+            transactionIndex
+        );
 
         uint256[7] memory auditorPCT;
         for (uint256 i = 0; i < 7; i++) {

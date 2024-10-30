@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: SEE LICENSE IN LICENSE
 pragma solidity 0.8.27;
-
-import {EncryptedBalance, EGCT, BalanceHistory} from "./types/Types.sol";
+import {EncryptedBalance, EGCT, BalanceHistory, AmountPCT} from "./types/Types.sol";
 import {BabyJubJub} from "./libraries/BabyJubJub.sol";
 
 contract EncryptedUserBalances {
@@ -23,7 +22,7 @@ contract EncryptedUserBalances {
         returns (
             EGCT memory eGCT,
             uint256 nonce,
-            uint256[7][] memory amountPCTs,
+            AmountPCT[] memory amountPCTs,
             uint256[7] memory balancePCT
         )
     {
@@ -46,7 +45,7 @@ contract EncryptedUserBalances {
         returns (
             EGCT memory eGCT,
             uint256 nonce,
-            uint256[7][] memory amountPCTs,
+            AmountPCT[] memory amountPCTs,
             uint256[7] memory balancePCT
         )
     {
@@ -81,17 +80,15 @@ contract EncryptedUserBalances {
         }
 
         // in all the case
-        _addToUserHistory(_user, _tokenId);
-
-        // add the amount pct to the balance
-        balance.amountPCTs.push(_amountPCT);
+        _addToUserHistory(_user, _tokenId, _amountPCT);
     }
 
     function _subtractFromUserBalance(
         address _user,
         uint256 _tokenId,
         EGCT memory _eGCT,
-        uint256[7] memory _balancePCT
+        uint256[7] memory _balancePCT,
+        uint256 _transactionIndex
     ) internal {
         EncryptedBalance storage balance = balances[_user][_tokenId];
 
@@ -100,7 +97,7 @@ contract EncryptedUserBalances {
         balance.eGCT.c2 = BabyJubJub._sub(balance.eGCT.c2, _eGCT.c2);
 
         // delete the amount pct from the balance
-        _deleteUserHistory(_user, _tokenId);
+        _deleteUserHistory(_user, _tokenId, _transactionIndex);
 
         // update balance pct
         balance.balancePCT = _balancePCT;
@@ -115,7 +112,11 @@ contract EncryptedUserBalances {
      *      so the balance hash is unique for each transaction and sender must prove
      *      that the balance hash is known beforehand with the current nonce
      */
-    function _addToUserHistory(address _user, uint256 _tokenId) internal {
+    function _addToUserHistory(
+        address _user,
+        uint256 _tokenId,
+        uint256[7] memory _amountPCT
+    ) internal {
         EncryptedBalance storage balance = balances[_user][_tokenId];
 
         uint256 nonce = balance.nonce;
@@ -124,11 +125,31 @@ contract EncryptedUserBalances {
 
         // mark the balance hash as valid
         balance.balanceList[balanceHash] = BalanceHistory({
-            index: balance.nextBalanceIndex,
+            index: balance.transactionIndex,
             isValid: true
         });
 
-        balance.nextBalanceIndex++;
+        // add the amount pct to the balance
+        balance.amountPCTs.push(
+            AmountPCT({pct: _amountPCT, index: balance.transactionIndex})
+        );
+
+        balance.transactionIndex++;
+    }
+
+    function _commitUserBalance(address _user, uint256 _tokenId) internal {
+        EncryptedBalance storage balance = balances[_user][_tokenId];
+
+        uint256 nonce = balance.nonce;
+        uint256 balanceHash = _hashEGCT(balance.eGCT);
+        balanceHash = uint256(keccak256(abi.encode(balanceHash, nonce)));
+
+        balance.balanceList[balanceHash] = BalanceHistory({
+            index: balance.transactionIndex,
+            isValid: true
+        });
+
+        balance.transactionIndex++;
     }
 
     /**
@@ -138,29 +159,27 @@ contract EncryptedUserBalances {
      * @dev Instead of deleting the history mapping one by one, we can just
      *      increase the nonce by one and the old history will be mark as invalid
      */
-    function _deleteUserHistory(address _user, uint256 _tokenId) internal {
+    function _deleteUserHistory(
+        address _user,
+        uint256 _tokenId,
+        uint256 _transactionIndex
+    ) internal {
         EncryptedBalance storage balance = balances[_user][_tokenId];
 
-        // before setting the next balnace index to 0, we need to clear the amount pcts
-        // from index 0 to balance.nextBalanceIndex
-        uint256 newLength = balance.amountPCTs.length -
-            balance.nextBalanceIndex;
-        for (uint256 i = 0; i < newLength; i++) {
-            balance.amountPCTs[i] = balance.amountPCTs[
-                i + balance.nextBalanceIndex
-            ];
-        }
-        // Resize the array to remove excess elements
-        while (balance.amountPCTs.length > newLength) {
-            balance.amountPCTs.pop();
+        for (uint256 i = balance.amountPCTs.length; i > 0; i--) {
+            uint256 index = i - 1;
+
+            if (balance.amountPCTs[index].index <= _transactionIndex) {
+                balance.amountPCTs[index] = balance.amountPCTs[
+                    balance.amountPCTs.length - 1
+                ];
+                balance.amountPCTs.pop();
+            }
         }
 
         balance.nonce++;
-        // setting the next balance index to 0 to start over
-        balance.nextBalanceIndex = 0;
 
-        // and need to add the new balance hash to the history with the new nonce
-        _addToUserHistory(_user, _tokenId);
+        _commitUserBalance(_user, _tokenId);
     }
 
     /**
@@ -187,12 +206,15 @@ contract EncryptedUserBalances {
         address _user,
         uint256 _tokenId,
         uint256 _balanceHash
-    ) internal view returns (bool) {
+    ) internal view returns (bool, uint256) {
         uint256 nonce = balances[_user][_tokenId].nonce;
         uint256 hashWithNonce = uint256(
             keccak256(abi.encode(_balanceHash, nonce))
         );
-        return balances[_user][_tokenId].balanceList[hashWithNonce].isValid;
+        return (
+            balances[_user][_tokenId].balanceList[hashWithNonce].isValid,
+            balances[_user][_tokenId].balanceList[hashWithNonce].index
+        );
     }
 
     /**

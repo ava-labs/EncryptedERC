@@ -32,7 +32,6 @@ contract Registrar {
      */
     event Register(address indexed user, Point publicKey);
 
-    // TODO(@mberatoz): pass the proof as a parameter
     function register(
         uint256[8] calldata proof,
         uint256[2] calldata input
