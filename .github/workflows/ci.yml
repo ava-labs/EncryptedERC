@@ -1,0 +1,52 @@
+name: "CI"
+
+env:
+  DOTENV_CONFIG_PATH: "./.env.example"
+  GOPRIVATE: "github.com/ava-labs/ac-etracrypto"
+  GH_ACCESS_TOKEN: ${{ secrets.ACETRACRYPTO_PRIVATE_SSH_KEY }}
+  HARDHAT_VAR_MNEMONIC: "test test test test test test test test test test test junk"
+
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  ci:
+    strategy:
+      matrix:
+        node-version: [18.x]
+        go-version: ["1.22"]
+
+    runs-on: "ubuntu-latest"
+    steps:
+      - name: "Check out the repo"
+        uses: "actions/checkout@v4"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - name: Setup Go ${{ matrix.go-version }}
+        uses: actions/setup-go@v4
+        with:
+          go-version: ${{ matrix.go-version }}
+
+      - run: git config --global url.https://$GH_ACCESS_TOKEN@github.com/.insteadOf https://github.com/
+
+      - name: "Install Golang dependencies"
+        run: "cd zk && make"
+
+      - name: "Install the dependencies"
+        run: "npm install"
+
+      - name: "Test the protocol"
+        run: "npx hardhat test"
+
+      - name: "Add test summary"
+        run: |
+          echo "## Test results" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Passed" >> $GITHUB_STEP_SUMMARY
