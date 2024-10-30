@@ -2,7 +2,6 @@ package main
 
 import (
 	"flag"
-	"log"
 
 	"github.com/ava-labs/EncryptedERC/hardhat"
 	"github.com/ava-labs/ac-etracrypto/helpers"
@@ -26,8 +25,6 @@ func contains(val *string, list []string) bool {
 */
 
 func main() {
-	VALID_OPERATIONS := []string{"REGISTER", "MINT", "BURN", "TRANSFER"}
-
 	operation := flag.String("operation", "", "Circuit Name [REGISTER,TRANSFER,BURN]")
 	input := flag.String("input", "", "Stringified JSON input")
 	output := flag.String("output", "", "Name of the circuit output file (output.json)")
@@ -38,11 +35,6 @@ func main() {
 
 	flag.Parse()
 
-	if !contains(operation, VALID_OPERATIONS) {
-		log.Fatal("Provide a valid operations between [REGISTER,TRANSFER,BURN]")
-		return
-	}
-
 	pp := helpers.TestingParams{Input: *input, Output: *output, CsPath: *csPath, PkPath: *pkPath, IsNew: *isNew, Extract: *shouldExtract}
 
 	switch *operation {
@@ -52,18 +44,9 @@ func main() {
 		hardhat.Mint(pp)
 	case "BURN":
 		hardhat.Burn(pp)
+	case "TRANSFER":
+		hardhat.Transfer(pp)
+	default:
+		panic("Invalid operation")
 	}
-
-	// switch *operation {
-	// case "REGISTER":
-	// 	hardhat.Register(pp)
-	// case "BURN":
-	// 	hardhat.Burn(pp)
-	// case "TRANSFER":
-	// 	hardhat.Transfer(pp)
-	// case "MINT":
-	// 	hardhat.Mint(pp)
-	// default:
-	// 	break
-	// }
 }
