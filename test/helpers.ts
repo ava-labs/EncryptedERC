@@ -214,6 +214,7 @@ export const privateTransfer = async (
 	senderEncryptedBalance: bigint[],
 	auditorPublicKey: bigint[],
 ) => {
+	const senderNewBalance = senderBalance - transferAmount;
 	// 1. encrypt the transfer amount with el-gamal for sender
 	const { cipher: encryptedAmountSender, random: encryptedAmountSenderRandom } =
 		encryptMessage(sender.publicKey, transferAmount);
@@ -239,6 +240,13 @@ export const privateTransfer = async (
 		authKey: auditorAuthKey,
 		encRandom: auditorEncRandom,
 	} = processPoseidonEncryption([transferAmount], auditorPublicKey);
+
+	// 5. create pct for the sender with the newly calculated balance
+	const {
+		ciphertext: senderCiphertext,
+		nonce: senderNonce,
+		authKey: senderAuthKey,
+	} = processPoseidonEncryption([senderNewBalance], sender.publicKey);
 
 	const publicInputs = [
 		...sender.publicKey.map(String),
@@ -273,7 +281,15 @@ export const privateTransfer = async (
 
 	const proof = await generateGnarkProof("TRANSFER", JSON.stringify(input));
 
-	return { proof, publicInputs };
+	return {
+		proof,
+		publicInputs,
+		senderBalancePCT: [
+			...senderCiphertext.map(String),
+			...senderAuthKey.map(String),
+			senderNonce.toString(),
+		],
+	};
 };
 
 export const decryptPCT = async (

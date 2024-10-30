@@ -282,7 +282,7 @@ describe("EncryptedERC", () => {
 		// 2. owner mints some tokens to userA repeatedly so userA's amount PCTs are updated
 		// 3. userA sends his burn proof
 		// after step 3, burn proof should be valid and need to updated pcts accordingly
-		describe.skip("Front Running Protection", () => {
+		describe("Front Running Protection", () => {
 			const INITIAL_MINT_COUNT = 4;
 			const SECOND_MINT_COUNT = 5;
 			const PER_MINT = 100n;
@@ -675,17 +675,23 @@ describe("EncryptedERC", () => {
 					const decrypted = await decryptPCT(sender.privateKey, pct);
 					senderBalance += decrypted[0];
 				}
+
+				const expectedPoint = mulPointEscalar(Base8, senderBalance);
+				expect(decryptedBalance).to.deep.equal(expectedPoint);
+
+				console.log("Before transfer sender balance is", senderBalance);
+				console.log("Before transfer receiver balance is", 0n);
 			});
 
 			it("should transfer properly", async () => {
 				const sender = users[0];
-				const receiver = users[1];
+				const receiver = users[4];
 
 				const senderEncryptedBalance = await encryptedERC.balanceOfStandalone(
 					sender.signer.address,
 				);
 
-				const { proof, publicInputs } = await privateTransfer(
+				const { proof, publicInputs, senderBalancePCT } = await privateTransfer(
 					sender,
 					senderBalance,
 					receiver,
@@ -697,9 +703,89 @@ describe("EncryptedERC", () => {
 					auditorPublicKey,
 				);
 
-				await encryptedERC
-					.connect(sender.signer)
-					.transfer(receiver.signer.address, 0n, proof, publicInputs);
+				expect(
+					await encryptedERC
+						.connect(sender.signer)
+						.transfer(
+							receiver.signer.address,
+							0n,
+							proof,
+							publicInputs,
+							senderBalancePCT,
+						),
+				).to.be.not.reverted;
+
+				console.log("Sender transfers", transferAmount, "to receiver");
+			});
+
+			it("sender balance should be updated properly", async () => {
+				const senderExpectedNewBalance = senderBalance - transferAmount;
+				const sender = users[0];
+
+				const balance = await encryptedERC.balanceOfStandalone(
+					sender.signer.address,
+				);
+
+				const decryptedBalance = decryptPoint(
+					sender.privateKey,
+					balance.eGCT.c1,
+					balance.eGCT.c2,
+				);
+
+				const balancePCT = balance.balancePCT;
+				const decryptedBalancePCT = await decryptPCT(
+					sender.privateKey,
+					balancePCT,
+				);
+
+				senderBalance = decryptedBalancePCT[0];
+
+				for (const [pct] of balance.amountPCTs) {
+					const decrypted = await decryptPCT(sender.privateKey, pct);
+					senderBalance += decrypted[0];
+				}
+
+				expect(senderBalance).to.equal(senderExpectedNewBalance);
+				const expectedPoint = mulPointEscalar(Base8, senderExpectedNewBalance);
+				expect(decryptedBalance).to.deep.equal(expectedPoint);
+
+				console.log("After transfer sender balance is", senderBalance);
+			});
+
+			it("receiver balance should be updated properly", async () => {
+				const receiver = users[4];
+
+				const balance = await encryptedERC.balanceOfStandalone(
+					receiver.signer.address,
+				);
+
+				const decryptedBalance = decryptPoint(
+					receiver.privateKey,
+					balance.eGCT.c1,
+					balance.eGCT.c2,
+				);
+
+				const balancePCT = balance.balancePCT;
+				let receiverBalance = 0n;
+
+				if (balancePCT.some((elem) => elem !== 0n)) {
+					const decryptedBalancePCT = await decryptPCT(
+						receiver.privateKey,
+						balancePCT,
+					);
+					receiverBalance = decryptedBalancePCT[0];
+				}
+
+				for (const [pct] of balance.amountPCTs) {
+					const decrypted = await decryptPCT(receiver.privateKey, pct);
+					receiverBalance += decrypted[0];
+				}
+
+				expect(receiverBalance).to.equal(transferAmount); // ?
+				const expectedPoint = mulPointEscalar(Base8, receiverBalance);
+				expect(decryptedBalance).to.deep.equal(expectedPoint);
+
+				console.log("After transfer receiver balance is", receiverBalance);
 			});
 		});
 	});

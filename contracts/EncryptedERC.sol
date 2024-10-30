@@ -77,6 +77,18 @@ contract EncryptedERC is TokenTracker, Ownable, EncryptedUserBalances {
      */
     event PrivateBurn(address indexed user, uint256[7] auditorPCT);
 
+    /**
+     * @param from Address of the sender
+     * @param to Address of the receiver
+     * @param auditorPCT Auditor PCT
+     * @dev Emitted when a private transfer is done
+     */
+    event PrivateTransfer(
+        address indexed from,
+        address indexed to,
+        uint256[7] auditorPCT
+    );
+
     ///////////////////////////////////////////////////
     ///                   Public                    ///
     ///////////////////////////////////////////////////
@@ -163,7 +175,8 @@ contract EncryptedERC is TokenTracker, Ownable, EncryptedUserBalances {
         address _to,
         uint256 _tokenId,
         uint256[8] calldata proof,
-        uint256[32] calldata input
+        uint256[32] calldata input,
+        uint256[7] calldata _balancePCT
     ) external {
         address _from = msg.sender;
         if (!isAuditorKeySet()) {
@@ -207,7 +220,7 @@ contract EncryptedERC is TokenTracker, Ownable, EncryptedUserBalances {
 
         transferVerifier.verifyProof(proof, input);
 
-        _transfer(_from, _to, _tokenId, input);
+        _transfer(_from, _to, _tokenId, input, _balancePCT);
     }
 
     /**
@@ -320,6 +333,60 @@ contract EncryptedERC is TokenTracker, Ownable, EncryptedUserBalances {
         address _from,
         address _to,
         uint256 _tokenId,
-        uint256[32] calldata input
-    ) internal {}
+        uint256[32] calldata input,
+        uint256[7] calldata _balancePCT
+    ) internal {
+        {
+            EGCT memory providedBalance = EGCT({
+                c1: Point({X: input[2], Y: input[3]}),
+                c2: Point({X: input[4], Y: input[5]})
+            });
+
+            uint256 balanceHash = _hashEGCT(providedBalance);
+            (bool isValid, uint256 transactionIndex) = _isBalanceValid(
+                _from,
+                _tokenId,
+                balanceHash
+            );
+            if (!isValid) {
+                revert InvalidProof();
+            }
+
+            EGCT memory fromEncryptedAmount = EGCT({
+                c1: Point({X: input[6], Y: input[7]}),
+                c2: Point({X: input[8], Y: input[9]})
+            });
+
+            _subtractFromUserBalance(
+                _from,
+                _tokenId,
+                fromEncryptedAmount,
+                _balancePCT,
+                transactionIndex
+            );
+        }
+
+        {
+            EGCT memory toEncryptedAmount = EGCT({
+                c1: Point({X: input[12], Y: input[13]}),
+                c2: Point({X: input[14], Y: input[15]})
+            });
+
+            uint256[7] memory amountPCT;
+            for (uint256 i = 0; i < 7; i++) {
+                amountPCT[i] = input[16 + i];
+            }
+
+            _addToUserBalance(_to, _tokenId, toEncryptedAmount, amountPCT);
+        }
+
+        {
+            uint256[7] memory auditorPCT;
+            for (uint256 i = 0; i < 7; i++) {
+                auditorPCT[i] = input[25 + i];
+            }
+
+            emit PrivateTransfer(_from, _to, auditorPCT);
+        }
+    }
 }
