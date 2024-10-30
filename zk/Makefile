@@ -1,6 +1,6 @@
 export GO111MODULE=on
 
-SOURCE_DIRS = cmd pkg
+SOURCE_DIRS = circuits cmd hardhat utils
 
 .PHONY: vendor fmtcheck clean build gotest gobench mod-clean
 
