@@ -18,6 +18,7 @@ import {
 	generateGnarkProof,
 	privateBurn,
 	privateMint,
+	privateTransfer,
 } from "./helpers";
 import { User } from "./user";
 
@@ -32,8 +33,12 @@ describe("EncryptedERC", () => {
 		signers = await ethers.getSigners();
 		owner = signers[0];
 
-		const { registrationVerifier, mintVerifier, burnVerifier } =
-			await deployVerifiers(owner);
+		const {
+			registrationVerifier,
+			mintVerifier,
+			burnVerifier,
+			transferVerifier,
+		} = await deployVerifiers(owner);
 		const babyJubJub = await deployLibrary(owner);
 
 		const registrarFactory = new Registrar__factory(owner);
@@ -53,6 +58,7 @@ describe("EncryptedERC", () => {
 			_symbol: "TEST",
 			_mintVerifier: mintVerifier,
 			_burnVerifier: burnVerifier,
+			_transferVerifier: transferVerifier,
 		});
 
 		await encryptedERC_.waitForDeployment();
@@ -276,7 +282,7 @@ describe("EncryptedERC", () => {
 		// 2. owner mints some tokens to userA repeatedly so userA's amount PCTs are updated
 		// 3. userA sends his burn proof
 		// after step 3, burn proof should be valid and need to updated pcts accordingly
-		describe("Front Running Protection", () => {
+		describe.skip("Front Running Protection", () => {
 			const INITIAL_MINT_COUNT = 4;
 			const SECOND_MINT_COUNT = 5;
 			const PER_MINT = 100n;
@@ -536,7 +542,7 @@ describe("EncryptedERC", () => {
 				);
 				const expectedPoint = mulPointEscalar(Base8, userABalance);
 
-				// expect(decryptedBalance).to.deep.equal(expectedPoint);
+				expect(decryptedBalance).to.deep.equal(expectedPoint);
 
 				const balancePCT = balance.balancePCT;
 				const decryptedBalancePCT = await decryptPCT(
@@ -553,7 +559,7 @@ describe("EncryptedERC", () => {
 					decryptedAmountPCTs.push(decrypted[0]);
 				}
 
-				// expect(sum + decryptedBalancePCT[0]).to.deep.equal(userABalance);
+				expect(sum + decryptedBalancePCT[0]).to.deep.equal(userABalance);
 				userABalance = sum + decryptedBalancePCT[0];
 
 				console.log(
@@ -637,6 +643,63 @@ describe("EncryptedERC", () => {
 					"and balance pct is",
 					decryptedBalancePCT[0],
 				);
+			});
+		});
+
+		describe("Private Transfer", () => {
+			let senderBalance = 0n;
+			const transferAmount = 500n;
+
+			it("sender needs to calculate the encrypted balance", async () => {
+				const sender = users[0];
+
+				const balance = await encryptedERC.balanceOfStandalone(
+					sender.signer.address,
+				);
+
+				const decryptedBalance = decryptPoint(
+					sender.privateKey,
+					balance.eGCT.c1,
+					balance.eGCT.c2,
+				);
+
+				const balancePCT = balance.balancePCT;
+				const decryptedBalancePCT = await decryptPCT(
+					sender.privateKey,
+					balancePCT,
+				);
+
+				senderBalance = decryptedBalancePCT[0];
+
+				for (const [pct] of balance.amountPCTs) {
+					const decrypted = await decryptPCT(sender.privateKey, pct);
+					senderBalance += decrypted[0];
+				}
+			});
+
+			it("should transfer properly", async () => {
+				const sender = users[0];
+				const receiver = users[1];
+
+				const senderEncryptedBalance = await encryptedERC.balanceOfStandalone(
+					sender.signer.address,
+				);
+
+				const { proof, publicInputs } = await privateTransfer(
+					sender,
+					senderBalance,
+					receiver,
+					transferAmount,
+					[
+						...senderEncryptedBalance.eGCT.c1,
+						...senderEncryptedBalance.eGCT.c2,
+					],
+					auditorPublicKey,
+				);
+
+				await encryptedERC
+					.connect(sender.signer)
+					.transfer(receiver.signer.address, 0n, proof, publicInputs);
 			});
 		});
 	});

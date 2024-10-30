@@ -14,6 +14,7 @@ struct CreateEncryptedERCParams {
     // verifiers
     address _mintVerifier;
     address _burnVerifier;
+    address _transferVerifier;
 }
 
 struct AmountPCT {

@@ -11,6 +11,7 @@ import {UserNotRegistered, UnauthorizedAccess, AuditorKeyNotSet, InvalidProof, I
 import {IRegistrar} from "./interfaces/IRegistrar.sol";
 import {IMintVerifier} from "./interfaces/verifiers/IMintVerifier.sol";
 import {IBurnVerifier} from "./interfaces/verifiers/IBurnVerifier.sol";
+import {ITransferVerifier} from "./interfaces/verifiers/ITransferVerifier.sol";
 
 contract EncryptedERC is TokenTracker, Ownable, EncryptedUserBalances {
     // registrar contract
@@ -19,6 +20,7 @@ contract EncryptedERC is TokenTracker, Ownable, EncryptedUserBalances {
     // verifiers
     IMintVerifier public mintVerifier;
     IBurnVerifier public burnVerifier;
+    ITransferVerifier public transferVerifier;
 
     // token name and symbol
     string public name;
@@ -44,6 +46,7 @@ contract EncryptedERC is TokenTracker, Ownable, EncryptedUserBalances {
 
         mintVerifier = IMintVerifier(params._mintVerifier);
         burnVerifier = IBurnVerifier(params._burnVerifier);
+        transferVerifier = ITransferVerifier(params._transferVerifier);
     }
 
     ///////////////////////////////////////////////////
@@ -156,6 +159,57 @@ contract EncryptedERC is TokenTracker, Ownable, EncryptedUserBalances {
         _privateBurn(_user, input, _balancePCT);
     }
 
+    function transfer(
+        address _to,
+        uint256 _tokenId,
+        uint256[8] calldata proof,
+        uint256[32] calldata input
+    ) external {
+        address _from = msg.sender;
+        if (!isAuditorKeySet()) {
+            revert AuditorKeyNotSet();
+        }
+
+        {
+            // check if the from user is registered
+            if (
+                !registrar.isUserRegistered(_from) ||
+                !registrar.isUserRegistered(_to)
+            ) {
+                revert UserNotRegistered();
+            }
+        }
+
+        {
+            // sender & receiver public key should match
+            uint256[2] memory fromPublicKey = registrar.getUserPublicKey(_from);
+            uint256[2] memory toPublicKey = registrar.getUserPublicKey(_to);
+
+            if (
+                fromPublicKey[0] != input[0] ||
+                fromPublicKey[1] != input[1] ||
+                toPublicKey[0] != input[10] ||
+                toPublicKey[1] != input[11]
+            ) {
+                revert InvalidProof();
+            }
+        }
+
+        {
+            // auditor public key should match
+            if (
+                auditorPublicKey.X != input[23] ||
+                auditorPublicKey.Y != input[24]
+            ) {
+                revert InvalidProof();
+            }
+        }
+
+        transferVerifier.verifyProof(proof, input);
+
+        _transfer(_from, _to, _tokenId, input);
+    }
+
     /**
      *
      * @param _user Address of the user
@@ -261,4 +315,11 @@ contract EncryptedERC is TokenTracker, Ownable, EncryptedUserBalances {
 
         emit PrivateBurn(_user, auditorPCT);
     }
+
+    function _transfer(
+        address _from,
+        address _to,
+        uint256 _tokenId,
+        uint256[32] calldata input
+    ) internal {}
 }
