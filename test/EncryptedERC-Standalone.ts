@@ -84,6 +84,11 @@ describe("EncryptedERC - Standalone", () => {
 		});
 
 		describe("Registration", () => {
+			let validParams: {
+				proof: string[];
+				publicInputs: string[];
+			};
+
 			it("users should be able to register properly", async () => {
 				// in register circuit we have 3 inputs
 				// private inputs = [senderPrivKey]
@@ -119,8 +124,9 @@ describe("EncryptedERC - Standalone", () => {
 					const publicKey = await registrar.getUserPublicKey(
 						user.signer.address,
 					);
-
 					expect(publicKey).to.deep.equal(user.publicKey);
+
+					validParams = { proof, publicInputs };
 				}
 			});
 
@@ -128,11 +134,13 @@ describe("EncryptedERC - Standalone", () => {
 				const alreadyRegisteredUser = users[0];
 
 				await expect(
-					registrar.connect(alreadyRegisteredUser.signer).register(
-						Array.from({ length: 8 }, () => 0n),
-						[0n, 0n],
-					),
-				).to.be.reverted;
+					registrar
+						.connect(alreadyRegisteredUser.signer)
+						.register(
+							validParams.proof.map(BigInt),
+							validParams.publicInputs.map(BigInt) as [bigint, bigint],
+						),
+				).to.be.revertedWithCustomError(registrar, "UserAlreadyRegistered");
 			});
 		});
 	});
@@ -214,6 +222,17 @@ describe("EncryptedERC - Standalone", () => {
 						.connect(owner)
 						.setAuditorPublicKey(nonRegisteredAuditor.signer.address),
 				).to.be.reverted;
+			});
+
+			// must write here for pass the AuditorKeyNotSet error
+			it("should revert if user try to deposit", async () => {
+				await expect(
+					encryptedERC.connect(users[0].signer).deposit(
+						1n,
+						users[0].signer.address,
+						Array.from({ length: 7 }, () => 1n),
+					),
+				).to.be.revertedWithCustomError(encryptedERC, "InvalidOperation");
 			});
 		});
 
@@ -301,7 +320,7 @@ describe("EncryptedERC - Standalone", () => {
 				const receiver = users[0];
 
 				const _proof = validParamsForUser0.proof;
-				const _publicInputs = validParamsForUser0.publicInputs;
+				const _publicInputs = [...validParamsForUser0.publicInputs];
 
 				// auditor public key indexes are 13 and 14
 				// only change [13]
@@ -357,6 +376,20 @@ describe("EncryptedERC - Standalone", () => {
 				validParams = { proof, publicInputs, userBalancePCT };
 			});
 
+			it("should revert if proved balance is not valid", async () => {
+				const user = users[0];
+
+				await expect(
+					encryptedERC
+						.connect(user.signer)
+						.privateBurn(
+							validParams.proof,
+							validParams.publicInputs,
+							validParams.userBalancePCT,
+						),
+				).to.be.reverted;
+			});
+
 			it("users balance pct and elgamal ciphertext should be updated properly", async () => {
 				const user = users[0];
 				const balance = await encryptedERC.balanceOfStandalone(
@@ -405,7 +438,7 @@ describe("EncryptedERC - Standalone", () => {
 				const user = users[0];
 
 				const _proof = validParams.proof;
-				const _publicInputs = validParams.publicInputs;
+				const _publicInputs = [...validParams.publicInputs];
 
 				// auditor public key indexes are 10 and 11
 				// only change [10]
@@ -436,7 +469,7 @@ describe("EncryptedERC - Standalone", () => {
 		// 2. owner mints some tokens to userA repeatedly so userA's amount PCTs are updated
 		// 3. userA sends his burn proof
 		// after step 3, burn proof should be valid and need to updated pcts accordingly
-		describe.skip("Front Running Protection", () => {
+		describe("Front Running Protection", () => {
 			const INITIAL_MINT_COUNT = 4;
 			const SECOND_MINT_COUNT = 5;
 			const PER_MINT = 100n;
@@ -771,9 +804,15 @@ describe("EncryptedERC - Standalone", () => {
 			});
 		});
 
-		describe.skip("Private Transfer", () => {
+		describe("Private Transfer", () => {
 			let senderBalance = 0n;
 			const transferAmount = 500n;
+			let validParams: {
+				to: string;
+				proof: string[];
+				publicInputs: string[];
+				senderBalancePCT: string[];
+			};
 
 			it("sender needs to calculate the encrypted balance", async () => {
 				const sender = users[0];
@@ -835,7 +874,30 @@ describe("EncryptedERC - Standalone", () => {
 						),
 				).to.be.not.reverted;
 
+				validParams = {
+					proof,
+					publicInputs,
+					senderBalancePCT,
+					to: receiver.signer.address,
+				};
+
 				console.log("Sender transfers", transferAmount, "to receiver");
+			});
+
+			it("should revert if sender provided balance is not valid", async () => {
+				const user = users[0];
+
+				await expect(
+					encryptedERC
+						.connect(user.signer)
+						.transfer(
+							validParams.to,
+							0n,
+							validParams.proof,
+							validParams.publicInputs,
+							validParams.senderBalancePCT,
+						),
+				).to.be.reverted;
 			});
 
 			it("sender balance should be updated properly", async () => {
@@ -891,6 +953,154 @@ describe("EncryptedERC - Standalone", () => {
 				expect(decryptedBalance).to.deep.equal(expectedPoint);
 
 				console.log("After transfer receiver balance is", totalBalance);
+			});
+
+			it("should revert is 'to' is not registered", async () => {
+				const nonRegisteredUser = users[5];
+
+				await expect(
+					encryptedERC
+						.connect(users[0].signer)
+						.transfer(
+							nonRegisteredUser.signer.address,
+							0n,
+							validParams.proof,
+							validParams.publicInputs,
+							validParams.senderBalancePCT,
+						),
+				).to.be.reverted;
+			});
+
+			it("should revert is 'from' is not registered", async () => {
+				const nonRegisteredUser = users[5];
+
+				await expect(
+					encryptedERC
+						.connect(nonRegisteredUser.signer)
+						.transfer(
+							users[0].signer.address,
+							0n,
+							validParams.proof,
+							validParams.publicInputs,
+							validParams.senderBalancePCT,
+						),
+				).to.be.reverted;
+			});
+
+			it("should revert if sender public key and public key from proof do not match ", async () => {
+				// fromPublicKey is at index 0 and 1
+				// only change [0]
+				const _proof = validParams.proof;
+				const _publicInputs = [...validParams.publicInputs];
+
+				_publicInputs[0] = "100";
+				_publicInputs[1] = validParams.publicInputs[1];
+
+				await expect(
+					encryptedERC
+						.connect(users[0].signer)
+						.transfer(
+							validParams.to,
+							0n,
+							_proof,
+							_publicInputs,
+							validParams.senderBalancePCT,
+						),
+				).to.be.reverted;
+
+				// change [1]
+				_publicInputs[0] = validParams.publicInputs[0];
+				_publicInputs[1] = "100";
+
+				await expect(
+					encryptedERC
+						.connect(users[0].signer)
+						.transfer(
+							validParams.to,
+							0n,
+							_proof,
+							_publicInputs,
+							validParams.senderBalancePCT,
+						),
+				).to.be.reverted;
+			});
+
+			it("should revert if receiver public key and public key from proof do not match", async () => {
+				// toPublicKey is at index 10 and 11
+				// only change [10]
+				const _proof = validParams.proof;
+				const _publicInputs = [...validParams.publicInputs];
+
+				_publicInputs[10] = "100";
+				_publicInputs[11] = validParams.publicInputs[11];
+
+				await expect(
+					encryptedERC
+						.connect(users[0].signer)
+						.transfer(
+							validParams.to,
+							0n,
+							_proof,
+							_publicInputs,
+							validParams.senderBalancePCT,
+						),
+				).to.be.reverted;
+
+				// only change [11]
+				_publicInputs[10] = validParams.publicInputs[10];
+				_publicInputs[11] = "100";
+
+				await expect(
+					encryptedERC
+						.connect(users[0].signer)
+						.transfer(
+							validParams.to,
+							0n,
+							_proof,
+							_publicInputs,
+							validParams.senderBalancePCT,
+						),
+				).to.be.reverted;
+			});
+
+			it("should revert if auditor public key is not match with public key in proof", async () => {
+				const receiver = users[0];
+
+				const _proof = validParams.proof;
+				const _publicInputs = [...validParams.publicInputs];
+
+				// auditor public key indexes are 23 and 24
+				// only change [23]
+				_publicInputs[23] = "100";
+				_publicInputs[24] = validParams.publicInputs[24];
+
+				await expect(
+					encryptedERC
+						.connect(owner)
+						.transfer(
+							validParams.to,
+							0n,
+							_proof,
+							_publicInputs,
+							validParams.senderBalancePCT,
+						),
+				).to.be.reverted;
+
+				// only change [24]
+				_publicInputs[23] = validParams.publicInputs[23];
+				_publicInputs[24] = "100";
+
+				await expect(
+					encryptedERC
+						.connect(owner)
+						.transfer(
+							validParams.to,
+							0n,
+							_proof,
+							_publicInputs,
+							validParams.senderBalancePCT,
+						),
+				).to.be.reverted;
 			});
 		});
 	});

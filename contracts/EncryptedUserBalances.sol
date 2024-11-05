@@ -216,18 +216,4 @@ contract EncryptedUserBalances {
             balances[_user][_tokenId].balanceList[hashWithNonce].index
         );
     }
-
-    /**
-     * @param _user User address
-     * @param _tokenId Token ID
-     * @param _pct Balance pct
-     * @dev Sets the balance pct for the user and token
-     */
-    function _setUserBalancePCT(
-        address _user,
-        uint256 _tokenId,
-        uint256[7] memory _pct
-    ) internal {
-        balances[_user][_tokenId].balancePCT = _pct;
-    }
 }

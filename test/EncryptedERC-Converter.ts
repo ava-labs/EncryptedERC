@@ -169,6 +169,16 @@ describe("EncryptedERC - Converter", () => {
 		});
 
 		describe("Auditor Key Set", () => {
+			it("can not deposit if auditor key is not set", async () => {
+				await expect(
+					encryptedERC.connect(users[0].signer).deposit(
+						1n,
+						erc20.target,
+						Array.from({ length: 7 }, () => 1n),
+					),
+				).to.be.reverted;
+			});
+
 			it("only owner can set auditor key", async () => {
 				await expect(
 					encryptedERC
@@ -323,6 +333,16 @@ describe("EncryptedERC - Converter", () => {
 			it("get tokens should return the proper addresses", async () => {
 				const contractTokens = await encryptedERC.getTokens();
 				expect(contractTokens).to.deep.equal([erc20.target]);
+			});
+
+			it("should revert if user is not registered", async () => {
+				await expect(
+					encryptedERC.connect(users[5].signer).deposit(
+						1n,
+						users[0].signer.address,
+						Array.from({ length: 7 }, () => 1n),
+					),
+				).to.be.reverted;
 			});
 		});
 
