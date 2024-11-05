@@ -23,7 +23,8 @@ contract EncryptedUserBalances {
             EGCT memory eGCT,
             uint256 nonce,
             AmountPCT[] memory amountPCTs,
-            uint256[7] memory balancePCT
+            uint256[7] memory balancePCT,
+            uint256 transactionIndex
         )
     {
         return balanceOf(_user, 0);
@@ -46,7 +47,8 @@ contract EncryptedUserBalances {
             EGCT memory eGCT,
             uint256 nonce,
             AmountPCT[] memory amountPCTs,
-            uint256[7] memory balancePCT
+            uint256[7] memory balancePCT,
+            uint256 transactionIndex
         )
     {
         EncryptedBalance storage balance = balances[_user][_tokenId];
@@ -54,7 +56,8 @@ contract EncryptedUserBalances {
             balance.eGCT,
             balance.nonce,
             balance.amountPCTs,
-            balance.balancePCT
+            balance.balancePCT,
+            balance.transactionIndex
         );
     }
 

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: SEE LICENSE IN LICENSE
 pragma solidity 0.8.27;
-import "hardhat/console.sol";
+
 // contracts
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {TokenTracker} from "./TokenTracker.sol";
@@ -534,10 +534,12 @@ contract EncryptedERC is TokenTracker, Ownable, EncryptedUserBalances {
                 balance.eGCT.c2 = BabyJubJub._add(balance.eGCT.c2, _eGCT.c2);
             }
 
-            _commitUserBalance(_to, tokenId);
             balance.amountPCTs.push(
                 AmountPCT({pct: _amountPCT, index: balance.transactionIndex})
             );
+            balance.transactionIndex++;
+
+            _commitUserBalance(_to, tokenId);
         }
 
         return (dust, tokenId);
