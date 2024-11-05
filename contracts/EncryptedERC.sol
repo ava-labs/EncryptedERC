@@ -10,7 +10,7 @@ import {EncryptedUserBalances} from "./EncryptedUserBalances.sol";
 import {BabyJubJub} from "./libraries/BabyJubJub.sol";
 
 // types
-import {CreateEncryptedERCParams, Point, EGCT, EncryptedBalance,AmountPCT} from "./types/Types.sol";
+import {CreateEncryptedERCParams, Point, EGCT, EncryptedBalance, AmountPCT} from "./types/Types.sol";
 
 // errors
 import {UserNotRegistered, UnauthorizedAccess, AuditorKeyNotSet, InvalidProof, InvalidOperation, TransferFailed, TokenDecimalsTooLow} from "./errors/Errors.sol";
@@ -506,10 +506,13 @@ contract EncryptedERC is TokenTracker, Ownable, EncryptedUserBalances {
         uint256 scalingFactor = 10 ** (tokenDecimals - decimals);
         dust = _amount % scalingFactor;
         uint256 value = _amount / scalingFactor;
-
         // Check if it's a new token
         if (tokenIds[_tokenAddress] == 0) {
             _addToken(_tokenAddress);
+        }
+
+        if (value == 0) {
+            return (dust, tokenId);
         }
 
         tokenId = tokenIds[_tokenAddress];
@@ -532,7 +535,9 @@ contract EncryptedERC is TokenTracker, Ownable, EncryptedUserBalances {
             }
 
             _commitUserBalance(_to, tokenId);
-            balance.amountPCTs.push(AmountPCT({pct: _amountPCT, index: balance.transactionIndex}));
+            balance.amountPCTs.push(
+                AmountPCT({pct: _amountPCT, index: balance.transactionIndex})
+            );
         }
 
         return (dust, tokenId);

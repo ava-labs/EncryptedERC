@@ -401,6 +401,16 @@ describe("EncryptedERC - Converter", () => {
 						dust: 0n,
 						encryptedValue: 1n,
 					},
+					{
+						convertedAmount: 50_000_000n,
+						dust: 50_000_000n,
+						encryptedValue: 0n,
+					},
+					{
+						convertedAmount: 1_234_567_890n,
+						dust: 34_567_890n,
+						encryptedValue: 12n,
+					},
 				];
 
 				for (const testCase of cases) {
