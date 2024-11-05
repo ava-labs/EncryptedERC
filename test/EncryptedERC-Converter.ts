@@ -130,22 +130,12 @@ describe("EncryptedERC - Converter", () => {
 					expect(publicKey).to.deep.equal(user.publicKey);
 				}
 			});
-
-			it("already registered user can not register again", async () => {
-				const alreadyRegisteredUser = users[0];
-
-				await expect(
-					registrar.connect(alreadyRegisteredUser.signer).register(
-						Array.from({ length: 8 }, () => 0n),
-						[0n, 0n],
-					),
-				).to.be.reverted;
-			});
 		});
 	});
 
 	describe("EncryptedERC", () => {
 		let auditorPublicKey: [bigint, bigint];
+
 		it("should initialize properly", async () => {
 			expect(encryptedERC.target).to.not.be.null;
 			expect(encryptedERC).to.not.be.null;
@@ -159,6 +149,16 @@ describe("EncryptedERC - Converter", () => {
 		});
 
 		it("should revert if auditor key is not set", async () => {
+			await expect(
+				encryptedERC.connect(users[0].signer).privateMint(
+					users[0].signer.address,
+					Array.from({ length: 8 }, () => 1n),
+					Array.from({ length: 22 }, () => 1n),
+				),
+			).to.be.reverted;
+		});
+
+		it("should revert if user try to private mint", async () => {
 			await expect(
 				encryptedERC.connect(users[0].signer).privateMint(
 					users[0].signer.address,

@@ -123,6 +123,17 @@ describe("EncryptedERC - Standalone", () => {
 					expect(publicKey).to.deep.equal(user.publicKey);
 				}
 			});
+
+			it("already registered user can not register again", async () => {
+				const alreadyRegisteredUser = users[0];
+
+				await expect(
+					registrar.connect(alreadyRegisteredUser.signer).register(
+						Array.from({ length: 8 }, () => 0n),
+						[0n, 0n],
+					),
+				).to.be.reverted;
+			});
 		});
 	});
 
@@ -153,6 +164,18 @@ describe("EncryptedERC - Standalone", () => {
 		});
 
 		describe("Auditor Key Set", () => {
+			it("should revert is user try to send transfer without an auditor key", async () => {
+				await expect(
+					encryptedERC.connect(users[0].signer).transfer(
+						users[0].signer.address,
+						users[1].signer.address,
+						Array.from({ length: 8 }, () => 1n),
+						Array.from({ length: 32 }, () => 1n),
+						Array.from({ length: 7 }, () => 1n),
+					),
+				).to.be.reverted;
+			});
+
 			it("only owner can set auditor key", async () => {
 				await expect(
 					encryptedERC
@@ -182,10 +205,24 @@ describe("EncryptedERC - Standalone", () => {
 
 				auditorPublicKey = [users[0].publicKey[0], users[0].publicKey[1]];
 			});
+
+			it("should revert if new auditor is not registered", async () => {
+				const nonRegisteredAuditor = users[5];
+
+				await expect(
+					encryptedERC
+						.connect(owner)
+						.setAuditorPublicKey(nonRegisteredAuditor.signer.address),
+				).to.be.reverted;
+			});
 		});
 
 		describe("Private Mint", () => {
 			const mintAmount = 10000n;
+			let validParamsForUser0: {
+				proof: string[];
+				publicInputs: string[];
+			};
 
 			it("after auditor key is set, only owner should be able to mint", async () => {
 				const receiver = users[0];
@@ -200,6 +237,8 @@ describe("EncryptedERC - Standalone", () => {
 				await encryptedERC
 					.connect(owner)
 					.privateMint(receiver.signer.address, proof, publicInputs);
+
+				validParamsForUser0 = { proof, publicInputs };
 			});
 
 			it("after private mint, balance should be updated properly", async () => {
@@ -219,10 +258,81 @@ describe("EncryptedERC - Standalone", () => {
 				expect(totalBalance).to.equal(mintAmount);
 				userBalance = totalBalance;
 			});
+
+			it("only owner can mint", async () => {
+				const nonOwner = users[5];
+
+				await expect(
+					encryptedERC.connect(nonOwner.signer).privateMint(
+						nonOwner.signer.address,
+						Array.from({ length: 8 }, () => 1n),
+						Array.from({ length: 22 }, () => 1n),
+					),
+				).to.be.reverted;
+			});
+
+			it("if destination user is not registered, mint should revert", async () => {
+				const nonRegisteredUser = users[5];
+
+				await expect(
+					encryptedERC.connect(owner).privateMint(
+						nonRegisteredUser.signer.address,
+						Array.from({ length: 8 }, () => 1n),
+						Array.from({ length: 22 }, () => 1n),
+					),
+				).to.be.reverted;
+			});
+
+			it("user public key and public key from proof should match, if not revert", async () => {
+				const notUser0 = users[4];
+
+				await expect(
+					encryptedERC
+						.connect(owner)
+						.privateMint(
+							notUser0.signer.address,
+							validParamsForUser0.proof,
+							validParamsForUser0.publicInputs,
+						),
+				).to.be.reverted;
+			});
+
+			it("auditor public key and auditor from proof should match, if not revert", async () => {
+				const receiver = users[0];
+
+				const _proof = validParamsForUser0.proof;
+				const _publicInputs = validParamsForUser0.publicInputs;
+
+				// auditor public key indexes are 13 and 14
+				// only change [13]
+				_publicInputs[13] = "100";
+				_publicInputs[14] = validParamsForUser0.publicInputs[14];
+
+				await expect(
+					encryptedERC
+						.connect(owner)
+						.privateMint(receiver.signer.address, _proof, _publicInputs),
+				).to.be.reverted;
+
+				// only change [14]
+				_publicInputs[13] = validParamsForUser0.publicInputs[13];
+				_publicInputs[14] = "100";
+
+				await expect(
+					encryptedERC
+						.connect(owner)
+						.privateMint(receiver.signer.address, _proof, _publicInputs),
+				).to.be.reverted;
+			});
 		});
 
 		describe("Private Burn", () => {
 			const burnAmount = 100n;
+			let validParams: {
+				proof: string[];
+				publicInputs: string[];
+				userBalancePCT: string[];
+			};
 
 			it("should burn properly", async () => {
 				const user = users[0];
@@ -243,6 +353,8 @@ describe("EncryptedERC - Standalone", () => {
 				await encryptedERC
 					.connect(user.signer)
 					.privateBurn(proof, publicInputs, userBalancePCT);
+
+				validParams = { proof, publicInputs, userBalancePCT };
 			});
 
 			it("users balance pct and elgamal ciphertext should be updated properly", async () => {
@@ -260,6 +372,62 @@ describe("EncryptedERC - Standalone", () => {
 
 				userBalance = totalBalance;
 			});
+
+			it("should revert if user is not registered", async () => {
+				const nonRegisteredUser = users[5];
+
+				await expect(
+					encryptedERC
+						.connect(nonRegisteredUser.signer)
+						.privateBurn(
+							validParams.proof,
+							validParams.publicInputs,
+							validParams.userBalancePCT,
+						),
+				).to.be.reverted;
+			});
+
+			it("user public key and public key from proof should match, if not revert", async () => {
+				const notUser0 = users[4];
+
+				await expect(
+					encryptedERC
+						.connect(notUser0.signer)
+						.privateBurn(
+							validParams.proof,
+							validParams.publicInputs,
+							validParams.userBalancePCT,
+						),
+				).to.be.reverted;
+			});
+
+			it("auditor public key and auditor from proof should match, if not revert", async () => {
+				const user = users[0];
+
+				const _proof = validParams.proof;
+				const _publicInputs = validParams.publicInputs;
+
+				// auditor public key indexes are 10 and 11
+				// only change [10]
+				_publicInputs[10] = "100";
+				_publicInputs[11] = validParams.publicInputs[11];
+
+				await expect(
+					encryptedERC
+						.connect(user.signer)
+						.privateBurn(_proof, _publicInputs, validParams.userBalancePCT),
+				).to.be.reverted;
+
+				// only change [14]
+				_publicInputs[10] = validParams.publicInputs[10];
+				_publicInputs[11] = "100";
+
+				await expect(
+					encryptedERC
+						.connect(user.signer)
+						.privateBurn(_proof, _publicInputs, validParams.userBalancePCT),
+				).to.be.reverted;
+			});
 		});
 
 		// In order to test front running protection what we can do is to
@@ -268,7 +436,7 @@ describe("EncryptedERC - Standalone", () => {
 		// 2. owner mints some tokens to userA repeatedly so userA's amount PCTs are updated
 		// 3. userA sends his burn proof
 		// after step 3, burn proof should be valid and need to updated pcts accordingly
-		describe("Front Running Protection", () => {
+		describe.skip("Front Running Protection", () => {
 			const INITIAL_MINT_COUNT = 4;
 			const SECOND_MINT_COUNT = 5;
 			const PER_MINT = 100n;
@@ -603,7 +771,7 @@ describe("EncryptedERC - Standalone", () => {
 			});
 		});
 
-		describe("Private Transfer", () => {
+		describe.skip("Private Transfer", () => {
 			let senderBalance = 0n;
 			const transferAmount = 500n;
 

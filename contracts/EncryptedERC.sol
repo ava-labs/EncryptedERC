@@ -127,6 +127,10 @@ contract EncryptedERC is TokenTracker, Ownable, EncryptedUserBalances {
         uint256[8] calldata proof,
         uint256[22] calldata input
     ) external onlyOwner {
+        if (isConverter) {
+            revert InvalidOperation();
+        }
+
         if (!isAuditorKeySet()) {
             revert AuditorKeyNotSet();
         }
@@ -290,10 +294,6 @@ contract EncryptedERC is TokenTracker, Ownable, EncryptedUserBalances {
      * @param input Proof input
      */
     function _privateMint(address _user, uint256[22] calldata input) internal {
-        if (isConverter) {
-            revert InvalidOperation();
-        }
-
         EGCT memory eGCT = EGCT({
             c1: Point({X: input[2], Y: input[3]}),
             c2: Point({X: input[4], Y: input[5]})

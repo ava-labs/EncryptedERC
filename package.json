@@ -9,7 +9,8 @@
 		"maci-crypto": "^1.2.2"
 	},
 	"scripts": {
-		"test": "mocha 'src/**/*.test.js'"
+		"test": "mocha 'src/**/*.test.js'",
+		"postinstall": "cd zk && make"
 	},
 	"keywords": [],
 	"author": ""
