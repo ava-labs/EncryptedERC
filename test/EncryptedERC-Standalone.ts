@@ -23,6 +23,8 @@ import {
 } from "./helpers";
 import { User } from "./user";
 
+const DECIMALS = 2;
+
 describe("EncryptedERC - Standalone", () => {
 	let registrar: Registrar;
 	let users: User[];
@@ -60,6 +62,7 @@ describe("EncryptedERC - Standalone", () => {
 			_mintVerifier: mintVerifier,
 			_burnVerifier: burnVerifier,
 			_transferVerifier: transferVerifier,
+			_decimals: DECIMALS,
 		});
 
 		await encryptedERC_.waitForDeployment();

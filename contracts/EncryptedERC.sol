@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: SEE LICENSE IN LICENSE
 pragma solidity 0.8.27;
-
+import "hardhat/console.sol";
 // contracts
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {TokenTracker} from "./TokenTracker.sol";
@@ -10,7 +10,7 @@ import {EncryptedUserBalances} from "./EncryptedUserBalances.sol";
 import {BabyJubJub} from "./libraries/BabyJubJub.sol";
 
 // types
-import {CreateEncryptedERCParams, Point, EGCT, EncryptedBalance} from "./types/Types.sol";
+import {CreateEncryptedERCParams, Point, EGCT, EncryptedBalance,AmountPCT} from "./types/Types.sol";
 
 // errors
 import {UserNotRegistered, UnauthorizedAccess, AuditorKeyNotSet, InvalidProof, InvalidOperation, TransferFailed, TokenDecimalsTooLow} from "./errors/Errors.sol";
@@ -36,8 +36,8 @@ contract EncryptedERC is TokenTracker, Ownable, EncryptedUserBalances {
     string public name;
     string public symbol;
 
-    // 2 decimal places
-    uint256 public constant decimals = 2;
+    // token decimals
+    uint8 public decimals;
 
     // auditor
     Point public auditorPublicKey = Point({X: 0, Y: 0});
@@ -53,6 +53,8 @@ contract EncryptedERC is TokenTracker, Ownable, EncryptedUserBalances {
             name = params._name;
             symbol = params._symbol;
         }
+
+        decimals = params._decimals;
 
         mintVerifier = IMintVerifier(params._mintVerifier);
         burnVerifier = IBurnVerifier(params._burnVerifier);
@@ -442,7 +444,7 @@ contract EncryptedERC is TokenTracker, Ownable, EncryptedUserBalances {
     function deposit(
         uint256 _amount,
         address _tokenAddress,
-        uint256[7] memory balancePCT
+        uint256[7] memory _amountPCT
     ) public {
         // revert if auditor key is not set
         if (!isAuditorKeySet()) {
@@ -469,7 +471,7 @@ contract EncryptedERC is TokenTracker, Ownable, EncryptedUserBalances {
             revert TransferFailed();
         }
 
-        (dust, tokenId) = _convertFrom(to, _amount, _tokenAddress, balancePCT);
+        (dust, tokenId) = _convertFrom(to, _amount, _tokenAddress, _amountPCT);
 
         token.transfer(to, dust);
 
@@ -494,17 +496,16 @@ contract EncryptedERC is TokenTracker, Ownable, EncryptedUserBalances {
         address _to,
         uint256 _amount,
         address _tokenAddress,
-        uint256[7] memory balancePCT
+        uint256[7] memory _amountPCT
     ) internal returns (uint256 dust, uint256 tokenId) {
         uint8 tokenDecimals = IERC20Metadata(_tokenAddress).decimals();
-
         if (tokenDecimals < decimals) {
             revert TokenDecimalsTooLow(tokenDecimals);
         }
 
         uint256 scalingFactor = 10 ** (tokenDecimals - decimals);
-        uint256 value = _amount / scalingFactor;
         dust = _amount % scalingFactor;
+        uint256 value = _amount / scalingFactor;
 
         // Check if it's a new token
         if (tokenIds[_tokenAddress] == 0) {
@@ -531,7 +532,7 @@ contract EncryptedERC is TokenTracker, Ownable, EncryptedUserBalances {
             }
 
             _commitUserBalance(_to, tokenId);
-            balance.balancePCT = balancePCT;
+            balance.amountPCTs.push(AmountPCT({pct: _amountPCT, index: balance.transactionIndex}));
         }
 
         return (dust, tokenId);

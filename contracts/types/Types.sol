@@ -11,6 +11,7 @@ struct CreateEncryptedERCParams {
     bool _isConverter;
     string _name;
     string _symbol;
+    uint8 _decimals;
     // verifiers
     address _mintVerifier;
     address _burnVerifier;
