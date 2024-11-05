@@ -476,7 +476,7 @@ describe("EncryptedERC - Converter", () => {
 			});
 		});
 
-		describe("Transferring Tokens", () => {
+		describe("Transferring Tokens - 1", () => {
 			let senderBalance: bigint; // hardcoded for now from the deposit test
 			const transferAmount = 1000n;
 
@@ -560,7 +560,7 @@ describe("EncryptedERC - Converter", () => {
 			});
 		});
 
-		describe("Transferring Tokens", () => {
+		describe("Transferring Tokens - 2", () => {
 			let senderBalance: bigint; // hardcoded for now from the deposit test
 			const transferAmount = 1000n;
 

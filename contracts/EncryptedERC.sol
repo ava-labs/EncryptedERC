@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: SEE LICENSE IN LICENSE
 pragma solidity 0.8.27;
+import "hardhat/console.sol";
 
 // contracts
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
@@ -503,10 +504,26 @@ contract EncryptedERC is TokenTracker, Ownable, EncryptedUserBalances {
             revert TokenDecimalsTooLow(tokenDecimals);
         }
 
-        uint256 scalingFactor = 10 ** (tokenDecimals - decimals);
-        dust = _amount % scalingFactor;
-        uint256 value = _amount / scalingFactor;
-        // Check if it's a new token
+        uint256 value;
+        if (tokenDecimals > decimals) {
+            // scale up
+            uint256 scalingFactor = 10 ** (tokenDecimals - decimals);
+            value = _amount / scalingFactor;
+
+            dust = _amount % scalingFactor;
+        } else if (tokenDecimals < decimals) {
+            // scale down
+            uint256 scalingFactor = 10 ** (decimals - tokenDecimals);
+            value = _amount / scalingFactor;
+
+            dust = _amount % scalingFactor;
+        } else {
+            // no scaling needed
+            value = _amount;
+            dust = 0;
+        }
+
+        // check if it's a new token
         if (tokenIds[_tokenAddress] == 0) {
             _addToken(_tokenAddress);
         }
