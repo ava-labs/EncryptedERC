@@ -26,11 +26,10 @@ contract TokenTracker {
      * @param tokenAddress Address of the token
      * @dev Adds a token to the tracker
      */
-    function _addToken(address tokenAddress) internal returns (uint256) {
+    function _addToken(address tokenAddress) internal {
         uint256 newTokenId = nextTokenId;
         tokenIds[tokenAddress] = newTokenId;
         tokens.push(tokenAddress);
         nextTokenId++;
-        return newTokenId;
     }
 }

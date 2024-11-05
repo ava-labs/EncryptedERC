@@ -44,9 +44,7 @@ contract Registrar {
 
         registrationVerifier.verifyProof(proof, input);
 
-        if (isUserRegistered(account)) {
-            revert UserAlreadyRegistered();
-        }
+        require(!isUserRegistered(account), "UserAlreadyRegistered");
 
         _register(account, Point({X: input[0], Y: input[1]}));
     }

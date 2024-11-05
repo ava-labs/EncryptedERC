@@ -131,22 +131,6 @@ library BabyJubJub {
     }
 
     /**
-     * @dev Check if a BabyJubJub point is on the curve
-     * (168700x^2 + y^2) = (1 + 168696x^2y^2)
-     * @param _point point to check
-     * @return is on curve
-     */
-    function isOnCurve(Point memory _point) internal pure returns (bool) {
-        uint256 xSq = mulmod(_point.X, _point.X, Q);
-        uint256 ySq = mulmod(_point.Y, _point.Y, Q);
-
-        uint256 lhs = addmod(mulmod(A, xSq, Q), ySq, Q);
-        uint256 rhs = addmod(1, mulmod(mulmod(D, xSq, Q), ySq, Q), Q);
-
-        return submod(lhs, rhs) == 0;
-    }
-
-    /**
      * @dev Modular subtract (mod n).
      * @param _a The first number
      * @param _b The number to be subtracted
@@ -230,12 +214,6 @@ library BabyJubJub {
         return EGCT({c1: c1, c2: c2});
     }
 
-    // encrypts zero point with random (1 in this case)
-    function encryptZero(
-        Point memory _publicKey
-    ) public view returns (EGCT memory) {
-        return elGamalEncryption(_publicKey, 0);
-    }
 
     // elgamal encryption with a given message
     function encrypt(

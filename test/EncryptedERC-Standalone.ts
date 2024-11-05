@@ -1,5 +1,5 @@
 import type { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/dist/src/signer-with-address";
-import { expect } from "chai";
+import { expect, use } from "chai";
 import { ethers } from "hardhat";
 import type { Registrar } from "../typechain-types/contracts/Registrar";
 import {
@@ -121,10 +121,10 @@ describe("EncryptedERC - Standalone", () => {
 						.true;
 
 					// and the public key is set
-					const publicKey = await registrar.getUserPublicKey(
+					const contractPublicKey = await registrar.getUserPublicKey(
 						user.signer.address,
 					);
-					expect(publicKey).to.deep.equal(user.publicKey);
+					expect(contractPublicKey).to.deep.equal(user.publicKey);
 
 					validParams = { proof, publicInputs };
 				}
@@ -140,7 +140,7 @@ describe("EncryptedERC - Standalone", () => {
 							validParams.proof.map(BigInt),
 							validParams.publicInputs.map(BigInt) as [bigint, bigint],
 						),
-				).to.be.revertedWithCustomError(registrar, "UserAlreadyRegistered");
+				).to.be.revertedWith("UserAlreadyRegistered");
 			});
 		});
 	});
