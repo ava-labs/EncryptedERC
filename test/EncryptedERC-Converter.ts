@@ -236,12 +236,11 @@ describe("EncryptedERC - Converter", () => {
 			});
 
 			it("mint some tokens to the owner", async () => {
-				const tx = await erc20s[0]
-					.connect(owner)
-					.mint(owner.address, mintAmount);
+				const erc20 = erc20s[1];
+				const tx = await erc20.connect(owner).mint(owner.address, mintAmount);
 				await tx.wait();
 
-				const balance = await erc20s[0].balanceOf(owner.address);
+				const balance = await erc20.balanceOf(owner.address);
 				expect(balance).to.equal(mintAmount);
 			});
 
