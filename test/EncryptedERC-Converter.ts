@@ -43,7 +43,7 @@ describe("EncryptedERC - Converter", () => {
 		} = await deployVerifiers(owner);
 		const babyJubJub = await deployLibrary(owner);
 
-		for (const d of [6, 18]) {
+		for (const d of [6, 18, DECIMALS]) {
 			const simpleERC20Factory = new SimpleERC20__factory(owner);
 			const simpleERC20_ = await simpleERC20Factory
 				.connect(owner)
@@ -349,17 +349,17 @@ describe("EncryptedERC - Converter", () => {
 			});
 		});
 
-		describe.skip("Depositing Tokens - Lower ERC20 Decimals (6)", () => {
+		describe("Depositing Tokens - Lower ERC20 Decimals (6)", () => {
 			const mintAmount = 1000000000000000000000000n;
 			let userEncryptedBalance = 0n;
 
 			it("mint some tokens to the owner", async () => {
-				const tx = await erc20s[1]
-					.connect(owner)
-					.mint(owner.address, mintAmount);
+				const erc20 = erc20s[0];
+
+				const tx = await erc20.connect(owner).mint(owner.address, mintAmount);
 				await tx.wait();
 
-				const balance = await erc20s[1].balanceOf(owner.address);
+				const balance = await erc20.balanceOf(owner.address);
 				expect(balance).to.equal(mintAmount);
 			});
 
@@ -384,23 +384,28 @@ describe("EncryptedERC - Converter", () => {
 
 				const cases = [
 					{
-						convertedAmount: 1_000_000_000_000_000_000n, // 1 token with 18 decimals
+						convertedAmount: 1_000_000n,
 						dust: 0n,
-						encryptedValue: 10_000_000_000n, // Represents 1.0000000000 in 10 decimals
+						encryptedValue: 10_000_000_000n,
 					},
 					{
-						convertedAmount: 1_000_000_000_001_000_000n, // 1.000000001 token with 18 decimals
-						dust: 1_000_000n, // Dust after scaling down
-						encryptedValue: 10_000_000_000n, // Represents 1.0000000000 in 10 decimals
+						convertedAmount: 1_000_001n,
+						dust: 0n,
+						encryptedValue: 10_000_010_000n,
 					},
 					{
-						convertedAmount: 123_456_789_000_000_000_000n, // 123.456789 tokens in 18 decimals
-						dust: 45_678_900_000_000n, // Dust after scaling down
-						encryptedValue: 1_234_567_890_000n, // Represents 123.4567890 in 10 decimals
+						convertedAmount: 500_000n,
+						dust: 0n,
+						encryptedValue: 5_000_000_000n,
+					},
+					{
+						convertedAmount: 123_456_789n,
+						dust: 0n,
+						encryptedValue: 1_234_567_890_000n,
 					},
 				];
 
-				const erc20 = erc20s[1];
+				const erc20 = erc20s[0];
 
 				for (const testCase of cases) {
 					// approve the deposit
@@ -410,12 +415,11 @@ describe("EncryptedERC - Converter", () => {
 
 					const erc20BalanceBefore = await erc20.balanceOf(owner.address);
 
-					// need to create a new pct for the balance pct
-					const { ciphertext, nonce, encRandom, authKey } =
-						processPoseidonEncryption(
-							[userEncryptedBalance + testCase.encryptedValue],
-							ownerUser.publicKey,
-						);
+					// need to create a new pct for the amount pct
+					const { ciphertext, nonce, authKey } = processPoseidonEncryption(
+						[testCase.encryptedValue],
+						ownerUser.publicKey,
+					);
 
 					await encryptedERC
 						.connect(owner)
@@ -452,23 +456,144 @@ describe("EncryptedERC - Converter", () => {
 			it("get tokens should return the proper addresses", async () => {
 				const contractTokens = await encryptedERC.getTokens();
 				expect(contractTokens).to.deep.equal([
-					erc20s[0].target,
 					erc20s[1].target,
+					erc20s[0].target,
 				]);
 			});
 
-			it("should revert if user is not registered", async () => {
+			it("should revert of user does not have enough token or enough approval for the deposit", async () => {
+				const user = users[1];
+
 				await expect(
-					encryptedERC.connect(users[5].signer).deposit(
+					encryptedERC.connect(user.signer).deposit(
 						1n,
-						users[0].signer.address,
+						erc20s[0].target,
 						Array.from({ length: 7 }, () => 1n),
 					),
 				).to.be.reverted;
 			});
 		});
 
-		describe.skip("Transferring Tokens - 1", () => {
+		describe("Depositing Tokens - Same ERC20 Decimals (10)", () => {
+			const mintAmount = 1000000000000000000000000n;
+			let userEncryptedBalance = 0n;
+
+			it("mint some tokens to the owner", async () => {
+				const erc20 = erc20s[2];
+
+				const tx = await erc20.connect(owner).mint(owner.address, mintAmount);
+				await tx.wait();
+
+				const balance = await erc20.balanceOf(owner.address);
+				expect(balance).to.equal(mintAmount);
+			});
+
+			it("should initialize user balance to 0", async () => {
+				const ownerUser = users[0];
+				const balance = await encryptedERC.balanceOf(
+					ownerUser.signer.address,
+					3,
+				);
+
+				const totalBalance = await getDecryptedBalance(
+					ownerUser.privateKey,
+					balance.amountPCTs,
+					balance.balancePCT,
+					balance.eGCT,
+				);
+				userEncryptedBalance = totalBalance;
+			});
+
+			it("should deposit tokens to EncryptedERC and return the dust properly and mint the proper balance", async () => {
+				const ownerUser = users[0];
+
+				const cases = [
+					{
+						convertedAmount: 1_000_000_000n,
+						dust: 0n,
+						encryptedValue: 1_000_000_000n,
+					},
+					{
+						convertedAmount: 123_456_789_000n,
+						dust: 0n,
+						encryptedValue: 123_456_789_000n,
+					},
+					{
+						convertedAmount: 50_000_000_000n,
+						dust: 0n,
+						encryptedValue: 50_000_000_000n,
+					},
+					{
+						convertedAmount: 1_000n,
+						dust: 0n,
+						encryptedValue: 1_000n,
+					},
+					{
+						convertedAmount: 999_999_999_999n,
+						dust: 0n,
+						encryptedValue: 999_999_999_999n,
+					},
+				];
+
+				const erc20 = erc20s[2];
+
+				for (const testCase of cases) {
+					// approve the deposit
+					await erc20
+						.connect(owner)
+						.approve(encryptedERC.target, testCase.convertedAmount);
+
+					const erc20BalanceBefore = await erc20.balanceOf(owner.address);
+
+					// need to create a new pct for the amount pct
+					const { ciphertext, nonce, authKey } = processPoseidonEncryption(
+						[testCase.encryptedValue],
+						ownerUser.publicKey,
+					);
+
+					await encryptedERC
+						.connect(owner)
+						.deposit(testCase.convertedAmount, erc20.target, [
+							...ciphertext,
+							...authKey,
+							nonce,
+						]);
+
+					const erc20BalanceAfter = await erc20.balanceOf(owner.address);
+					expect(erc20BalanceAfter).to.equal(
+						erc20BalanceBefore - testCase.convertedAmount + testCase.dust,
+					);
+
+					const balance = await encryptedERC.balanceOf(
+						ownerUser.signer.address,
+						3,
+					);
+
+					const totalBalance = await getDecryptedBalance(
+						ownerUser.privateKey,
+						balance.amountPCTs,
+						balance.balancePCT,
+						balance.eGCT,
+					);
+
+					expect(totalBalance).to.equal(
+						userEncryptedBalance + testCase.encryptedValue,
+					);
+					userEncryptedBalance = totalBalance;
+				}
+			});
+
+			it("get tokens should return the proper addresses", async () => {
+				const contractTokens = await encryptedERC.getTokens();
+				expect(contractTokens).to.deep.equal([
+					erc20s[1].target,
+					erc20s[0].target,
+					erc20s[2].target,
+				]);
+			});
+		});
+
+		describe("Transferring Tokens - 1", () => {
 			let senderBalance: bigint; // hardcoded for now from the deposit test
 			const transferAmount = 1000n;
 
@@ -552,14 +677,14 @@ describe("EncryptedERC - Converter", () => {
 			});
 		});
 
-		describe.skip("Transferring Tokens - 2", () => {
+		describe("Transferring Tokens - 2", () => {
 			let senderBalance: bigint; // hardcoded for now from the deposit test
 			const transferAmount = 1000n;
 
 			it("sender balance should initialized properly", async () => {
 				const sender = users[0];
 
-				const balance = await encryptedERC.balanceOf(sender.signer.address, 1);
+				const balance = await encryptedERC.balanceOf(sender.signer.address, 2);
 
 				const totalBalance = await getDecryptedBalance(
 					sender.privateKey,
@@ -575,7 +700,7 @@ describe("EncryptedERC - Converter", () => {
 				const sender = users[0];
 				const receiver = users[1];
 
-				const balance = await encryptedERC.balanceOf(sender.signer.address, 1);
+				const balance = await encryptedERC.balanceOf(sender.signer.address, 2);
 				const senderEncryptedBalance = [...balance.eGCT.c1, ...balance.eGCT.c2];
 
 				const { proof, publicInputs, senderBalancePCT } = await privateTransfer(
@@ -592,7 +717,7 @@ describe("EncryptedERC - Converter", () => {
 						.connect(sender.signer)
 						.transfer(
 							receiver.signer.address,
-							1n,
+							2n,
 							proof,
 							publicInputs,
 							senderBalancePCT,
@@ -605,7 +730,7 @@ describe("EncryptedERC - Converter", () => {
 			it("sender balance should be updated properly", async () => {
 				const sender = users[0];
 
-				const balance = await encryptedERC.balanceOf(sender.signer.address, 1);
+				const balance = await encryptedERC.balanceOf(sender.signer.address, 2);
 
 				const totalBalance = await getDecryptedBalance(
 					sender.privateKey,
@@ -622,7 +747,7 @@ describe("EncryptedERC - Converter", () => {
 
 				const balance = await encryptedERC.balanceOf(
 					receiver.signer.address,
-					1,
+					2,
 				);
 
 				const totalBalance = await getDecryptedBalance(
@@ -632,7 +757,7 @@ describe("EncryptedERC - Converter", () => {
 					balance.eGCT,
 				);
 
-				expect(totalBalance).to.equal(transferAmount * 2n); // since the sender also has the same amount from previous transfer
+				expect(totalBalance).to.equal(transferAmount);
 			});
 		});
 	});

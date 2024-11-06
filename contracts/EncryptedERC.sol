@@ -1,7 +1,5 @@
 // SPDX-License-Identifier: SEE LICENSE IN LICENSE
 pragma solidity 0.8.27;
-import "hardhat/console.sol";
-
 // contracts
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {TokenTracker} from "./TokenTracker.sol";
@@ -467,13 +465,12 @@ contract EncryptedERC is TokenTracker, Ownable, EncryptedUserBalances {
             revert UserNotRegistered();
         }
 
-        bool success = token.transferFrom(msg.sender, address(this), _amount);
-        if (!success) {
-            revert TransferFailed();
-        }
+        // this function reverts if the transfer fails
+        token.transferFrom(to, address(this), _amount);
 
         (dust, tokenId) = _convertFrom(to, _amount, _tokenAddress, _amountPCT);
 
+        // transfer the dust back to the user
         token.transfer(to, dust);
 
         emit Deposit(to, _amount, dust, tokenId);
@@ -500,39 +497,32 @@ contract EncryptedERC is TokenTracker, Ownable, EncryptedUserBalances {
         uint256[7] memory _amountPCT
     ) internal returns (uint256 dust, uint256 tokenId) {
         uint8 tokenDecimals = IERC20Metadata(_tokenAddress).decimals();
-        if (tokenDecimals < decimals) {
-            revert TokenDecimalsTooLow(tokenDecimals);
-        }
 
         uint256 value;
         if (tokenDecimals > decimals) {
             // scale up
             uint256 scalingFactor = 10 ** (tokenDecimals - decimals);
             value = _amount / scalingFactor;
-
             dust = _amount % scalingFactor;
         } else if (tokenDecimals < decimals) {
             // scale down
             uint256 scalingFactor = 10 ** (decimals - tokenDecimals);
-            value = _amount / scalingFactor;
-
-            dust = _amount % scalingFactor;
+            value = _amount * scalingFactor;
+            dust = 0;
         } else {
             // no scaling needed
             value = _amount;
             dust = 0;
         }
-
         // check if it's a new token
         if (tokenIds[_tokenAddress] == 0) {
             _addToken(_tokenAddress);
         }
+        tokenId = tokenIds[_tokenAddress];
 
         if (value == 0) {
             return (dust, tokenId);
         }
-
-        tokenId = tokenIds[_tokenAddress];
 
         {
             uint256[2] memory publicKey = registrar.getUserPublicKey(_to);
