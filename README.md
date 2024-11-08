@@ -1,4 +1,4 @@
-# Encrypted ERC-20 (eERC)
+# Encrypted ERC-20 Protocol
 
 The Encrypted ERC-20 (eERC) is a protocol that enables efficient confidential token transfers on Avalanche blockchain. eERC does not require modification at the protocol level or off-chain actors and relies purely on zk-SNARKs and homomorphic encryption. It comes with various features such as:
 
@@ -71,17 +71,27 @@ Jest:
 npm run test --coverage
 ```
 
-## Specifications
+## 📊 Performance Overview
 
-On-chain gas costs (Fuji):
+### ⛽ On-Chain Gas Costs (Fuji Testnet)
 
--   Mint (Deposit): 750397 TODO
--   Burn (Withdraw): 584371 TODO
--   Register: 870487 TODO
--   Transfer: 1359399 TODO
+| **Operation**        | **Gas Cost**   |
+|----------------------|----------------|
+| Register             | 273,085 gas    |
+| Deposit              | 556,273 gas    |
+| Withdraw             | *TODO*      |
+| Private Burn         | 646,666 gas    |
+| Private Mint         | 677,304 gas    |
+| Private Transfer     | 1,036,451 gas  |
+| Update Auditor       | 103,753 gas    |
 
-ZK Proof generation (Macbook Pro M1 TODO (M3 Pro)):
+### ⏱️ Circuit Proving Times
 
--   Burn (Withdraw) Circuit: 318.66ms (0.32s) TODO
--   Register Circuit: 26.39ms (0.03s) TODO
--   Transfer Circuit: 369.66ms (0.37s) TODO
+Tested on a MacBook (M3 Pro CPU):
+
+| **Operation**        | **Proving Time** |
+|----------------------|------------------|
+| Registration         | 71 ms            |
+| Private Mint         | 359 ms           |
+| Private Burn         | 360 ms           |
+| Private Transfer     | 606 ms           |

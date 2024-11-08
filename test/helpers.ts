@@ -24,6 +24,18 @@ import type { User } from "./user";
 
 const execAsync = util.promisify(exec);
 
+let startTime: number;
+
+export const startTimer = () => {
+	startTime = Date.now();
+};
+
+export const stopTimer = () => {
+	const endTime = Date.now();
+	const duration = endTime - startTime;
+	console.log(`Time taken: ${duration}ms`);
+};
+
 export const deployVerifiers = async (signer: SignerWithAddress) => {
 	const registrationVerifierFactory = new RegistrationVerifier__factory(signer);
 	const registrationVerifier = await registrationVerifierFactory.deploy();
@@ -78,9 +90,12 @@ export const generateGnarkProof = async (
 	const executable = path.join(__dirname, "../", "zk", "build", executableName);
 
 	const cmd = `${executable} --operation ${type} --input '${input}' --pk ${pkPath} --cs ${csPath} --output ${outputPath}`;
-
+	
+	// todo why stdout?
+	startTimer();
+	console.log("Generating proof for ", type);
 	const { stderr: err, stdout } = await execAsync(cmd);
-
+	stopTimer();
 	if (err) throw new Error(err);
 
 	const output = fs.readFileSync(outputPath, "utf-8");

@@ -35,6 +35,7 @@ const main = async () => {
 		_isConverter: false, // lets leave it false for now
 		_name: "Encrypted ERC",
 		_symbol: "EERC",
+		_decimals: 4,
 		_mintVerifier: mintVerifier,
 		_burnVerifier: burnVerifier,
 		_transferVerifier: transferVerifier,
