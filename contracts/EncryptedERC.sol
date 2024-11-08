@@ -77,27 +77,39 @@ contract EncryptedERC is TokenTracker, Ownable, EncryptedUserBalances {
     /**
      * @param user Address of the user
      * @param auditorPCT Auditor PCT
-     * @dev Emitted when a private mint is done
+     * @param auditorAddress Auditor Address
+     * @dev Emitted when a private mint occurs
      */
-    event PrivateMint(address indexed user, uint256[7] auditorPCT);
+    event PrivateMint(
+        address indexed user,
+        uint256[7] auditorPCT,
+        address auditorAddress
+    );
 
     /**
      * @param user Address of the user
      * @param auditorPCT Auditor PCT
-     * @dev Emitted when a private burn is done
+     * @param auditorAddress Auditor Address
+     * @dev Emitted when a private burn occurs
      */
-    event PrivateBurn(address indexed user, uint256[7] auditorPCT);
+    event PrivateBurn(
+        address indexed user,
+        uint256[7] auditorPCT,
+        address auditorAddress
+    );
 
     /**
      * @param from Address of the sender
      * @param to Address of the receiver
      * @param auditorPCT Auditor PCT
-     * @dev Emitted when a private transfer is done
+     * @param auditorAddress Auditor Address
+     * @dev Emitted when a private transfer occurs
      */
     event PrivateTransfer(
         address indexed from,
         address indexed to,
-        uint256[7] auditorPCT
+        uint256[7] auditorPCT,
+        address auditorAddress
     );
 
     /**
@@ -105,7 +117,7 @@ contract EncryptedERC is TokenTracker, Ownable, EncryptedUserBalances {
      * @param amount Amount of the deposit
      * @param dust Amount of the dust
      * @param tokenId Token ID
-     * @dev Emitted when a deposit is done
+     * @dev Emitted when a deposit occurs
      */
     event Deposit(
         address indexed user,
@@ -121,7 +133,7 @@ contract EncryptedERC is TokenTracker, Ownable, EncryptedUserBalances {
     /**
      * @param _user Address of the user
      * @param proof Proof
-     * @param input Proof input
+     * @param input Public inputs for the proof
      */
     function privateMint(
         address _user,
@@ -164,7 +176,7 @@ contract EncryptedERC is TokenTracker, Ownable, EncryptedUserBalances {
 
     /**
      * @param proof Proof
-     * @param input Public inputs
+     * @param input Public inputs for the proof
      */
     function privateBurn(
         uint256[8] calldata proof,
@@ -186,7 +198,7 @@ contract EncryptedERC is TokenTracker, Ownable, EncryptedUserBalances {
         }
 
         {
-            // auditor public key should match
+            // auditor public keys should match
             if (
                 auditorPublicKey.X != input[10] ||
                 auditorPublicKey.Y != input[11]
@@ -204,7 +216,7 @@ contract EncryptedERC is TokenTracker, Ownable, EncryptedUserBalances {
      * @param _to Address of the receiver
      * @param _tokenId Token ID
      * @param proof Proof
-     * @param input Proof input
+     * @param input Public inputs for the proof
      * @param _balancePCT Balance PCT
      */
     function transfer(
@@ -220,7 +232,7 @@ contract EncryptedERC is TokenTracker, Ownable, EncryptedUserBalances {
         }
 
         {
-            // check if the from user is registered
+            // check if the from and to users are registered
             if (
                 !registrar.isUserRegistered(_from) ||
                 !registrar.isUserRegistered(_to)
@@ -230,7 +242,7 @@ contract EncryptedERC is TokenTracker, Ownable, EncryptedUserBalances {
         }
 
         {
-            // sender & receiver public key should match
+            // sender and receiver public keys should match
             uint256[2] memory fromPublicKey = registrar.getUserPublicKey(_from);
             uint256[2] memory toPublicKey = registrar.getUserPublicKey(_to);
 
@@ -245,7 +257,7 @@ contract EncryptedERC is TokenTracker, Ownable, EncryptedUserBalances {
         }
 
         {
-            // auditor public key should match
+            // auditor public keys should match
             if (
                 auditorPublicKey.X != input[23] ||
                 auditorPublicKey.Y != input[24]
@@ -263,7 +275,7 @@ contract EncryptedERC is TokenTracker, Ownable, EncryptedUserBalances {
      *
      * @param _user Address of the user
      *
-     * @dev sets the auditor public key
+     * @dev Sets the auditor's public key
      */
     function setAuditorPublicKey(address _user) external onlyOwner {
         if (!registrar.isUserRegistered(_user)) {
@@ -292,7 +304,7 @@ contract EncryptedERC is TokenTracker, Ownable, EncryptedUserBalances {
 
     /**
      * @param _user Address of the user
-     * @param input Proof input
+     * @param input Public inputs for the proof
      */
     function _privateMint(address _user, uint256[22] calldata input) internal {
         EGCT memory eGCT = EGCT({
@@ -312,12 +324,12 @@ contract EncryptedERC is TokenTracker, Ownable, EncryptedUserBalances {
 
         _addToUserBalance(_user, tokenId, eGCT, _amountPCT);
 
-        emit PrivateMint(_user, _auditorPCT);
+        emit PrivateMint(_user, _auditorPCT, auditor);
     }
 
     /**
      * @param _user Address of the user
-     * @param input Proof input
+     * @param input Public inputs for the proof
      * @param _balancePCT Balance PCT
      */
     function _privateBurn(
@@ -358,14 +370,14 @@ contract EncryptedERC is TokenTracker, Ownable, EncryptedUserBalances {
             auditorPCT[i] = input[12 + i];
         }
 
-        emit PrivateBurn(_user, auditorPCT);
+        emit PrivateBurn(_user, auditorPCT, auditor);
     }
 
     /**
      * @param _from Address of the sender
      * @param _to Address of the receiver
      * @param _tokenId Token ID
-     * @param input Proof input
+     * @param input Public inputs for the proof
      * @param _balancePCT Balance PCT
      */
     function _transfer(
@@ -425,7 +437,7 @@ contract EncryptedERC is TokenTracker, Ownable, EncryptedUserBalances {
                 auditorPCT[i] = input[25 + i];
             }
 
-            emit PrivateTransfer(_from, _to, auditorPCT);
+            emit PrivateTransfer(_from, _to, auditorPCT, auditor);
         }
     }
 
@@ -438,7 +450,7 @@ contract EncryptedERC is TokenTracker, Ownable, EncryptedUserBalances {
      * @param _amount Amount to deposit
      * @param _tokenAddress Token address
      *
-     * @dev Deposits an existing ERC20 token to the contract
+     * @dev Deposits an existing ERC20 token to the contract which trivially encrypts the amount and adds it to the user's balance
      */
     function deposit(
         uint256 _amount,
