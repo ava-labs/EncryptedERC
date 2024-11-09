@@ -6,8 +6,8 @@ import {
 } from "../typechain-types/factories/contracts";
 
 const main = async () => {
+	const DECIMALS = 4;
 	const [deployer] = await ethers.getSigners();
-	// console.log(signers.length);
 
 	const { registrationVerifier, mintVerifier, burnVerifier, transferVerifier } =
 		await deployVerifiers(deployer);
@@ -35,10 +35,10 @@ const main = async () => {
 		_isConverter: false, // lets leave it false for now
 		_name: "Encrypted ERC",
 		_symbol: "EERC",
-		_decimals: 4,
 		_mintVerifier: mintVerifier,
 		_burnVerifier: burnVerifier,
 		_transferVerifier: transferVerifier,
+		_decimals: DECIMALS,
 	});
 	await encryptedERC.waitForDeployment();
 
