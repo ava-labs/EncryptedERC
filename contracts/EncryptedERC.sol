@@ -177,22 +177,39 @@ contract EncryptedERC is TokenTracker, Ownable, EncryptedUserBalances {
     /**
      * @param proof Proof
      * @param input Public inputs for the proof
+     * @dev Private burn is transffering the encrypted amount to BURN_USER
+     *      which is the identity point (0, 1)
      */
     function privateBurn(
         uint256[8] calldata proof,
-        uint256[19] calldata input,
+        uint256[32] calldata input,
         uint256[7] calldata _balancePCT
     ) external {
-        address _user = msg.sender;
+        // if contract is a converter, then revert
+        if (isConverter) {
+            revert InvalidOperation();
+        }
 
-        if (!registrar.isUserRegistered(_user)) {
-            revert UserNotRegistered();
+        address _to = registrar.BURN_USER();
+        address _from = msg.sender;
+        uint256 tokenId = 0; // since burn is only stand-alone eERC
+
+        {
+            if (!registrar.isUserRegistered(_from)) {
+                revert UserNotRegistered();
+            }
         }
 
         {
-            // user public key should match
-            uint256[2] memory userPublicKey = registrar.getUserPublicKey(_user);
-            if (userPublicKey[0] != input[0] || userPublicKey[1] != input[1]) {
+            uint256[2] memory fromPublicKey = registrar.getUserPublicKey(_from);
+            uint256[2] memory burnPublicKey = [uint256(0), uint256(1)];
+
+            if (
+                fromPublicKey[0] != input[0] ||
+                fromPublicKey[1] != input[1] ||
+                burnPublicKey[0] != input[10] ||
+                burnPublicKey[1] != input[11]
+            ) {
                 revert InvalidProof();
             }
         }
@@ -200,16 +217,25 @@ contract EncryptedERC is TokenTracker, Ownable, EncryptedUserBalances {
         {
             // auditor public keys should match
             if (
-                auditorPublicKey.X != input[10] ||
-                auditorPublicKey.Y != input[11]
+                auditorPublicKey.X != input[23] ||
+                auditorPublicKey.Y != input[24]
             ) {
                 revert InvalidProof();
             }
         }
 
-        burnVerifier.verifyProof(proof, input);
+        transferVerifier.verifyProof(proof, input);
 
-        _privateBurn(_user, input, _balancePCT);
+        _transfer(_from, _to, tokenId, input, _balancePCT);
+
+        {
+            uint256[7] memory auditorPCT;
+            for (uint256 i = 0; i < 7; i++) {
+                auditorPCT[i] = input[25 + i];
+            }
+
+            emit PrivateBurn(_from, auditorPCT, auditor);
+        }
     }
 
     /**
@@ -225,7 +251,7 @@ contract EncryptedERC is TokenTracker, Ownable, EncryptedUserBalances {
         uint256[8] calldata proof,
         uint256[32] calldata input,
         uint256[7] calldata _balancePCT
-    ) external {
+    ) public {
         address _from = msg.sender;
         if (!isAuditorKeySet()) {
             revert AuditorKeyNotSet();
@@ -269,6 +295,15 @@ contract EncryptedERC is TokenTracker, Ownable, EncryptedUserBalances {
         transferVerifier.verifyProof(proof, input);
 
         _transfer(_from, _to, _tokenId, input, _balancePCT);
+
+        {
+            uint256[7] memory auditorPCT;
+            for (uint256 i = 0; i < 7; i++) {
+                auditorPCT[i] = input[25 + i];
+            }
+
+            emit PrivateTransfer(_from, _to, auditorPCT, auditor);
+        }
     }
 
     /**
@@ -429,15 +464,6 @@ contract EncryptedERC is TokenTracker, Ownable, EncryptedUserBalances {
             }
 
             _addToUserBalance(_to, _tokenId, toEncryptedAmount, amountPCT);
-        }
-
-        {
-            uint256[7] memory auditorPCT;
-            for (uint256 i = 0; i < 7; i++) {
-                auditorPCT[i] = input[25 + i];
-            }
-
-            emit PrivateTransfer(_from, _to, auditorPCT, auditor);
         }
     }
 

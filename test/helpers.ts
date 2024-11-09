@@ -90,7 +90,7 @@ export const generateGnarkProof = async (
 	const executable = path.join(__dirname, "../", "zk", "build", executableName);
 
 	const cmd = `${executable} --operation ${type} --input '${input}' --pk ${pkPath} --cs ${csPath} --output ${outputPath}`;
-	
+
 	// todo why stdout?
 	startTimer();
 	console.log("Generating proof for ", type);
@@ -161,74 +161,29 @@ export const privateMint = async (
 	return { proof, publicInputs };
 };
 
+// private burn is transferring the encrypted amount to BURN_USER
+// which is the identity point (0, 1)
 export const privateBurn = async (
-	amount: bigint,
 	user: User,
-	userEncryptedBalance: bigint[],
 	userBalance: bigint,
+	amount: bigint,
+	userEncryptedBalance: bigint[],
 	auditorPublicKey: bigint[],
 ) => {
-	const newBalance = userBalance - amount;
-	const userPublicKey = user.publicKey;
-
-	// 1. encrypt the negated burn amount with el-gamal
-	const { cipher: encryptedAmount } = encryptMessage(userPublicKey, amount);
-
-	// 2. create pct for the user with the newly calculated balance
-	const {
-		ciphertext: userCiphertext,
-		nonce: userNonce,
-		authKey: userAuthKey,
-	} = processPoseidonEncryption([newBalance], userPublicKey);
-
-	// 3. create pct for the auditor with the burn amount
-	const {
-		ciphertext: auditorCiphertext,
-		nonce: auditorNonce,
-		encRandom: auditorEncRandom,
-		authKey: auditorAuthKey,
-	} = processPoseidonEncryption([amount], auditorPublicKey);
-
-	const publicInputs = [
-		...userPublicKey.map(String),
-		...userEncryptedBalance.map(String),
-		...encryptedAmount[0].map(String),
-		...encryptedAmount[1].map(String),
-		...auditorPublicKey.map(String),
-		...auditorCiphertext.map(String),
-		...auditorAuthKey.map(String),
-		auditorNonce.toString(),
-	];
-
-	const privateInputs = [
-		formatPrivKeyForBabyJub(user.privateKey).toString(),
-		userBalance.toString(),
-		auditorEncRandom.toString(),
-		amount.toString(),
-	];
-
-	const input = {
-		privateInputs,
-		publicInputs,
-	};
-
-	const proof = await generateGnarkProof("BURN", JSON.stringify(input));
-
-	return {
-		proof,
-		publicInputs,
-		userBalancePCT: [
-			...userCiphertext.map(String),
-			...userAuthKey.map(String),
-			userNonce.toString(),
-		],
-	};
+	return privateTransfer(
+		user,
+		userBalance,
+		[0n, 1n],
+		amount,
+		userEncryptedBalance,
+		auditorPublicKey,
+	);
 };
 
 export const privateTransfer = async (
 	sender: User,
 	senderBalance: bigint,
-	receiver: User,
+	receiverPublicKey: bigint[],
 	transferAmount: bigint,
 	senderEncryptedBalance: bigint[],
 	auditorPublicKey: bigint[],
@@ -242,7 +197,7 @@ export const privateTransfer = async (
 	const {
 		cipher: encryptedAmountReceiver,
 		random: encryptedAmountReceiverRandom,
-	} = encryptMessage(receiver.publicKey, transferAmount);
+	} = encryptMessage(receiverPublicKey, transferAmount);
 
 	// 3. creates a pct for receiver with the transfer amount
 	const {
@@ -250,7 +205,7 @@ export const privateTransfer = async (
 		nonce: receiverNonce,
 		authKey: receiverAuthKey,
 		encRandom: receiverEncRandom,
-	} = processPoseidonEncryption([transferAmount], receiver.publicKey);
+	} = processPoseidonEncryption([transferAmount], receiverPublicKey);
 
 	// 4. creates a pct for auditor with the transfer amount
 	const {
@@ -272,7 +227,7 @@ export const privateTransfer = async (
 		...senderEncryptedBalance.map(String),
 		...encryptedAmountSender[0].map(String),
 		...encryptedAmountSender[1].map(String),
-		...receiver.publicKey.map(String),
+		...receiverPublicKey.map(String),
 		...encryptedAmountReceiver[0].map(String),
 		...encryptedAmountReceiver[1].map(String),
 		...receiverCiphertext.map(String),
