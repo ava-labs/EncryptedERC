@@ -17,7 +17,7 @@ import {UserNotRegistered, UnauthorizedAccess, AuditorKeyNotSet, InvalidProof, I
 // interfaces
 import {IRegistrar} from "./interfaces/IRegistrar.sol";
 import {IMintVerifier} from "./interfaces/verifiers/IMintVerifier.sol";
-import {IBurnVerifier} from "./interfaces/verifiers/IBurnVerifier.sol";
+import {IWithdrawVerifier} from "./interfaces/verifiers/IWithdrawVerifier.sol";
 import {ITransferVerifier} from "./interfaces/verifiers/ITransferVerifier.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
@@ -28,7 +28,7 @@ contract EncryptedERC is TokenTracker, Ownable, EncryptedUserBalances {
 
     // verifiers
     IMintVerifier public mintVerifier;
-    IBurnVerifier public burnVerifier;
+    IWithdrawVerifier public withdrawVerifier;
     ITransferVerifier public transferVerifier;
 
     // token name and symbol
@@ -56,7 +56,7 @@ contract EncryptedERC is TokenTracker, Ownable, EncryptedUserBalances {
         decimals = params._decimals;
 
         mintVerifier = IMintVerifier(params._mintVerifier);
-        burnVerifier = IBurnVerifier(params._burnVerifier);
+        withdrawVerifier = IWithdrawVerifier(params._withdrawVerifier);
         transferVerifier = ITransferVerifier(params._transferVerifier);
     }
 
@@ -514,7 +514,13 @@ contract EncryptedERC is TokenTracker, Ownable, EncryptedUserBalances {
         emit Deposit(to, _amount, dust, tokenId);
     }
 
-    function withdraw(uint256 _tokenId) public {}
+    function withdraw(
+        uint256 _amount,
+        uint256 _tokenId,
+        uint256[8] calldata proof,
+        uint256[20] calldata input,
+        uint256[7] memory _balancePCT
+    ) public {}
 
     /**
      *

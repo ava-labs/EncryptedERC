@@ -39,7 +39,7 @@ describe("EncryptedERC - Standalone", () => {
 		const {
 			registrationVerifier,
 			mintVerifier,
-			burnVerifier,
+			withdrawVerifier,
 			transferVerifier,
 		} = await deployVerifiers(owner);
 		const babyJubJub = await deployLibrary(owner);
@@ -60,7 +60,7 @@ describe("EncryptedERC - Standalone", () => {
 			_name: "Test",
 			_symbol: "TEST",
 			_mintVerifier: mintVerifier,
-			_burnVerifier: burnVerifier,
+			_withdrawVerifier: withdrawVerifier,
 			_transferVerifier: transferVerifier,
 			_decimals: DECIMALS,
 		});

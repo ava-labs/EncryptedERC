@@ -35,7 +35,7 @@ func main() {
 	fmt.Println("Number of constraints:", nbConstraints)
 
 	fmt.Println("Compiling burn circuit")
-	bcircuit := circuits.BurnCircuit{}
+	bcircuit := circuits.WithdrawCircuit{}
 	br1cs, err := frontend.Compile(ecc.BN254.ScalarField(), r1cs.NewBuilder, &bcircuit)
 	if err != nil {
 		panic(err)

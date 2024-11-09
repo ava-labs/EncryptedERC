@@ -10,7 +10,7 @@ import (
 	"github.com/consensys/gnark/frontend"
 )
 
-func Burn(pp helpers.TestingParams) {
+func Withdraw(pp helpers.TestingParams) {
 	inputString := pp.Input
 	var inputs Inputs
 	err := json.Unmarshal([]byte(inputString), &inputs)
@@ -18,7 +18,7 @@ func Burn(pp helpers.TestingParams) {
 		panic(err)
 	}
 
-	f := func() frontend.Circuit { return &circuits.BurnCircuit{} }
+	f := func() frontend.Circuit { return &circuits.WithdrawCircuit{} }
 
 	ccs, pk, vk, err := helpers.LoadCircuit(pp, f)
 	if err != nil {
@@ -39,8 +39,8 @@ func Burn(pp helpers.TestingParams) {
 	utils.WriteProof(pp.Output, &a, &b, &c)
 
 	if pp.Extract {
-		helpers.SaveCS(ccs, "BURN")
-		helpers.SavePK(pk, "BURN")
-		helpers.SaveVK(vk, "BURN")
+		helpers.SaveCS(ccs, "WITHDRAW")
+		helpers.SavePK(pk, "WITHDRAW")
+		helpers.SaveVK(vk, "WITHDRAW")
 	}
 }

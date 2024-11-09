@@ -14,7 +14,7 @@ struct CreateEncryptedERCParams {
     uint8 _decimals;
     // verifiers
     address _mintVerifier;
-    address _burnVerifier;
+    address _withdrawVerifier;
     address _transferVerifier;
 }
 

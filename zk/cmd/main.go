@@ -7,15 +7,6 @@ import (
 	"github.com/ava-labs/ac-etracrypto/helpers"
 )
 
-func contains(val *string, list []string) bool {
-	for _, v := range list {
-		if v == *val {
-			return true
-		}
-	}
-	return false
-}
-
 /*
 	Input structure
 	{
@@ -25,7 +16,7 @@ func contains(val *string, list []string) bool {
 */
 
 func main() {
-	operation := flag.String("operation", "", "Circuit Name [REGISTER,TRANSFER,BURN]")
+	operation := flag.String("operation", "", "Circuit Name [REGISTER,TRANSFER,MINT,WITHDRAW]")
 	input := flag.String("input", "", "Stringified JSON input")
 	output := flag.String("output", "", "Name of the circuit output file (output.json)")
 	csPath := flag.String("cs", "", "Path to the circuit cs.r1cs")
@@ -42,8 +33,8 @@ func main() {
 		hardhat.Register(pp)
 	case "MINT":
 		hardhat.Mint(pp)
-	case "BURN":
-		hardhat.Burn(pp)
+	case "WITHDRAW":
+		hardhat.Withdraw(pp)
 	case "TRANSFER":
 		hardhat.Transfer(pp)
 	default:

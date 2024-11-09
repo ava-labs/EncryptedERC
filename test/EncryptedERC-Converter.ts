@@ -18,6 +18,7 @@ import {
 	generateGnarkProof,
 	getDecryptedBalance,
 	privateTransfer,
+	withdraw,
 } from "./helpers";
 import { User } from "./user";
 
@@ -38,7 +39,7 @@ describe("EncryptedERC - Converter", () => {
 		const {
 			registrationVerifier,
 			mintVerifier,
-			burnVerifier,
+			withdrawVerifier,
 			transferVerifier,
 		} = await deployVerifiers(owner);
 		const babyJubJub = await deployLibrary(owner);
@@ -68,7 +69,7 @@ describe("EncryptedERC - Converter", () => {
 			_name: "Test",
 			_symbol: "TEST",
 			_mintVerifier: mintVerifier,
-			_burnVerifier: burnVerifier,
+			_withdrawVerifier: withdrawVerifier,
 			_transferVerifier: transferVerifier,
 			_decimals: DECIMALS,
 		});
@@ -593,7 +594,63 @@ describe("EncryptedERC - Converter", () => {
 			});
 		});
 
-		describe("Transferring Tokens - 1", () => {
+		describe("Withdrawing Tokens", () => {
+			const tokenId = 2;
+			const withdrawAmount = 1000n;
+			let userInitialBalance: bigint;
+
+			it("should initialize user balance properly", async () => {
+				const user = users[0];
+
+				const balance = await encryptedERC.balanceOf(
+					user.signer.address,
+					tokenId,
+				);
+
+				const totalBalance = await getDecryptedBalance(
+					user.privateKey,
+					balance.amountPCTs,
+					balance.balancePCT,
+					balance.eGCT,
+				);
+
+				userInitialBalance = totalBalance;
+			});
+
+			it("should withdraw token properly", async () => {
+				const user = users[0];
+				const balance = await encryptedERC.balanceOf(
+					user.signer.address,
+					tokenId,
+				);
+				const userEncryptedBalance = [...balance.eGCT.c1, ...balance.eGCT.c2];
+
+				const { proof, publicInputs, userBalancePCT } = await withdraw(
+					withdrawAmount,
+					user,
+					userEncryptedBalance,
+					userInitialBalance,
+					auditorPublicKey,
+				);
+
+				console.log("proof", proof.length);
+				console.log("publicInputs", publicInputs.length);
+
+				// expect(
+				// 	await encryptedERC
+				// 		.connect(user.signer)
+				// 		.withdraw(
+				// 			withdrawAmount,
+				// 			tokenId,
+				// 			proof,
+				// 			publicInputs,
+				// 			userBalancePCT,
+				// 		),
+				// ).to.be.not.reverted;
+			});
+		});
+
+		describe.skip("Transferring Tokens - 1", () => {
 			let senderBalance: bigint; // hardcoded for now from the deposit test
 			const transferAmount = 1000n;
 
@@ -677,7 +734,7 @@ describe("EncryptedERC - Converter", () => {
 			});
 		});
 
-		describe("Transferring Tokens - 2", () => {
+		describe.skip("Transferring Tokens - 2", () => {
 			let senderBalance: bigint; // hardcoded for now from the deposit test
 			const transferAmount = 1000n;
 

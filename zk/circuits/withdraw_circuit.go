@@ -6,13 +6,13 @@ import (
 	"github.com/consensys/gnark/frontend"
 )
 
-type BurnCircuit struct {
+type WithdrawCircuit struct {
 	Sender      Sender
 	Auditor     Auditor
-	ValueToBurn frontend.Variable
+	ValueToBurn frontend.Variable `gnark:",public"`
 }
 
-func (circuit *BurnCircuit) Define(api frontend.API) error {
+func (circuit *WithdrawCircuit) Define(api frontend.API) error {
 	// Initialize babyjub wrapper
 	babyjub := babyjub.NewBjWrapper(api, tedwards.BN254)
 
