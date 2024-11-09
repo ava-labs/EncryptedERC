@@ -622,7 +622,7 @@ describe("EncryptedERC - Converter", () => {
 				const { proof, publicInputs, senderBalancePCT } = await privateTransfer(
 					sender,
 					senderBalance,
-					receiver,
+					receiver.publicKey,
 					transferAmount,
 					senderEncryptedBalance,
 					auditorPublicKey,
@@ -706,7 +706,7 @@ describe("EncryptedERC - Converter", () => {
 				const { proof, publicInputs, senderBalancePCT } = await privateTransfer(
 					sender,
 					senderBalance,
-					receiver,
+					receiver.publicKey,
 					transferAmount,
 					senderEncryptedBalance,
 					auditorPublicKey,
