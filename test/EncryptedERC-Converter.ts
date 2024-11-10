@@ -213,6 +213,16 @@ describe("EncryptedERC - Converter", () => {
 
 				auditorPublicKey = [users[0].publicKey[0], users[0].publicKey[1]];
 			});
+
+			it("should revert if user try to private burn in converter", async () => {
+				await expect(
+					encryptedERC.connect(users[0].signer).privateBurn(
+						Array.from({ length: 8 }, () => 1n),
+						Array.from({ length: 32 }, () => 1n),
+						Array.from({ length: 7 }, () => 1n),
+					),
+				).to.be.revertedWithCustomError(encryptedERC, "InvalidOperation");
+			});
 		});
 
 		describe("Depositing Tokens - Higher ERC20 Decimals (18)", () => {
@@ -594,10 +604,15 @@ describe("EncryptedERC - Converter", () => {
 			});
 		});
 
-		describe("Withdrawing Tokens", () => {
+		describe("Withdrawing Tokens - Lower ERC20 Decimals (6)", () => {
 			const tokenId = 2;
 			const withdrawAmount = 1000n;
 			let userInitialBalance: bigint;
+			let validProof: {
+				proof: string[];
+				publicInputs: string[];
+				userBalancePCT: string[];
+			};
 
 			it("should initialize user balance properly", async () => {
 				const user = users[0];
@@ -633,24 +648,200 @@ describe("EncryptedERC - Converter", () => {
 					auditorPublicKey,
 				);
 
-				console.log("proof", proof.length);
-				console.log("publicInputs", publicInputs.length);
+				expect(
+					await encryptedERC
+						.connect(user.signer)
+						.withdraw(
+							withdrawAmount,
+							tokenId,
+							proof,
+							publicInputs,
+							userBalancePCT,
+						),
+				).to.be.not.reverted;
 
-				// expect(
-				// 	await encryptedERC
-				// 		.connect(user.signer)
-				// 		.withdraw(
-				// 			withdrawAmount,
-				// 			tokenId,
-				// 			proof,
-				// 			publicInputs,
-				// 			userBalancePCT,
-				// 		),
-				// ).to.be.not.reverted;
+				validProof = { proof, publicInputs, userBalancePCT };
+			});
+
+			it("after withdrawing, the user balance should be updated properly", async () => {
+				const user = users[0];
+				const balance = await encryptedERC.balanceOf(
+					user.signer.address,
+					tokenId,
+				);
+
+				const totalBalance = await getDecryptedBalance(
+					user.privateKey,
+					balance.amountPCTs,
+					balance.balancePCT,
+					balance.eGCT,
+				);
+
+				expect(totalBalance).to.equal(userInitialBalance - withdrawAmount);
+			});
+
+			it("should revert if public keys are not matching", async () => {
+				const user = users[1];
+
+				await expect(
+					encryptedERC
+						.connect(user.signer)
+						.withdraw(
+							withdrawAmount,
+							tokenId,
+							validProof.proof,
+							validProof.publicInputs,
+							validProof.userBalancePCT,
+						),
+				).to.be.revertedWithCustomError(encryptedERC, "InvalidProof");
+			});
+
+			it("should revert if amount is not matching", async () => {
+				const user = users[0];
+
+				await expect(
+					encryptedERC
+						.connect(user.signer)
+						.withdraw(
+							withdrawAmount + 1n,
+							tokenId,
+							validProof.proof,
+							validProof.publicInputs,
+							validProof.userBalancePCT,
+						),
+				).to.be.revertedWithCustomError(encryptedERC, "InvalidProof");
+			});
+
+			it("should revert if auditor public key is not matching", async () => {
+				const _publicInputs = [...validProof.publicInputs];
+				_publicInputs[10] = "0";
+				_publicInputs[11] = "0";
+
+				await expect(
+					encryptedERC
+						.connect(users[0].signer)
+						.withdraw(
+							withdrawAmount,
+							tokenId,
+							validProof.proof,
+							_publicInputs,
+							validProof.userBalancePCT,
+						),
+				).to.be.revertedWithCustomError(encryptedERC, "InvalidProof");
+			});
+
+			it("should revert if proof is not valid", async () => {
+				const user = users[0];
+				const _proof = [...validProof.proof];
+				_proof[0] = "0";
+
+				await expect(
+					encryptedERC
+						.connect(user.signer)
+						.withdraw(
+							withdrawAmount,
+							tokenId,
+							validProof.proof,
+							validProof.publicInputs,
+							validProof.userBalancePCT,
+						),
+				).to.be.revertedWithCustomError(encryptedERC, "InvalidProof");
+			});
+
+			it("should revert if token is not registered", async () => {
+				const user = users[0];
+
+				await expect(
+					encryptedERC
+						.connect(user.signer)
+						.withdraw(
+							withdrawAmount,
+							10n,
+							validProof.proof,
+							validProof.publicInputs,
+							validProof.userBalancePCT,
+						),
+				).to.be.revertedWithCustomError(encryptedERC, "UnknownToken");
 			});
 		});
 
-		describe.skip("Transferring Tokens - 1", () => {
+		describe("Withdrawing Tokens - Higher ERC20 Decimals (10)", () => {
+			const tokenId = 1;
+			const withdrawAmount = 10000n;
+			let userInitialBalance: bigint;
+			let validProof: {
+				proof: string[];
+				publicInputs: string[];
+				userBalancePCT: string[];
+			};
+
+			it("should initialize user balance properly", async () => {
+				const user = users[0];
+				const balance = await encryptedERC.balanceOf(
+					user.signer.address,
+					tokenId,
+				);
+
+				const totalBalance = await getDecryptedBalance(
+					user.privateKey,
+					balance.amountPCTs,
+					balance.balancePCT,
+					balance.eGCT,
+				);
+
+				userInitialBalance = totalBalance;
+			});
+
+			it("should withdraw token properly", async () => {
+				const user = users[0];
+				const balance = await encryptedERC.balanceOf(
+					user.signer.address,
+					tokenId,
+				);
+				const userEncryptedBalance = [...balance.eGCT.c1, ...balance.eGCT.c2];
+
+				const { proof, publicInputs, userBalancePCT } = await withdraw(
+					withdrawAmount,
+					user,
+					userEncryptedBalance,
+					userInitialBalance,
+					auditorPublicKey,
+				);
+
+				expect(
+					await encryptedERC
+						.connect(user.signer)
+						.withdraw(
+							withdrawAmount,
+							tokenId,
+							proof,
+							publicInputs,
+							userBalancePCT,
+						),
+				).to.be.not.reverted;
+
+				validProof = { proof, publicInputs, userBalancePCT };
+			});
+
+			it("after withdrawing, the user balance should be updated properly", async () => {
+				const user = users[0];
+				const balance = await encryptedERC.balanceOf(
+					user.signer.address,
+					tokenId,
+				);
+
+				const totalBalance = await getDecryptedBalance(
+					user.privateKey,
+					balance.amountPCTs,
+					balance.balancePCT,
+					balance.eGCT,
+				);
+
+				expect(totalBalance).to.equal(userInitialBalance - withdrawAmount);
+			});
+		});
+
+		describe("Transferring Tokens - 1", () => {
 			let senderBalance: bigint; // hardcoded for now from the deposit test
 			const transferAmount = 1000n;
 
@@ -734,7 +925,7 @@ describe("EncryptedERC - Converter", () => {
 			});
 		});
 
-		describe.skip("Transferring Tokens - 2", () => {
+		describe("Transferring Tokens - 2", () => {
 			let senderBalance: bigint; // hardcoded for now from the deposit test
 			const transferAmount = 1000n;
 

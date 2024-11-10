@@ -1,6 +1,6 @@
 module.exports = {
   skipFiles: [
-    "verifiers/BurnVerifier.sol",
+    "verifiers/WithdrawVerifier.sol",
     "verifiers/MintVerifier.sol",
     "verifiers/TransferVerifier.sol",
     "verifiers/RegistrationVerifier.sol",

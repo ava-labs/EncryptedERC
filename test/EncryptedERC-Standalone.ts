@@ -237,6 +237,18 @@ describe("EncryptedERC - Standalone", () => {
 					),
 				).to.be.revertedWithCustomError(encryptedERC, "InvalidOperation");
 			});
+
+			it("should revert if user try to withdraw", async () => {
+				await expect(
+					encryptedERC.connect(users[0].signer).withdraw(
+						1000n,
+						1n,
+						Array.from({ length: 8 }, () => 1n),
+						Array.from({ length: 20 }, () => 1n),
+						Array.from({ length: 7 }, () => 1n),
+					),
+				).to.be.revertedWithCustomError(encryptedERC, "InvalidOperation");
+			});
 		});
 
 		describe("Private Mint", () => {
@@ -453,10 +465,10 @@ describe("EncryptedERC - Standalone", () => {
 				const _proof = validParams.proof;
 				const _publicInputs = [...validParams.publicInputs];
 
-				// auditor public key indexes are 10 and 11
-				// only change [10]
-				_publicInputs[10] = "100";
-				_publicInputs[11] = validParams.publicInputs[11];
+				// auditor public key indexes are 23 and 24
+				// only change [23]
+				_publicInputs[23] = "100";
+				_publicInputs[24] = validParams.publicInputs[24];
 
 				await expect(
 					encryptedERC
@@ -464,9 +476,9 @@ describe("EncryptedERC - Standalone", () => {
 						.privateBurn(_proof, _publicInputs, validParams.userBalancePCT),
 				).to.be.reverted;
 
-				// only change [14]
-				_publicInputs[10] = validParams.publicInputs[10];
-				_publicInputs[11] = "100";
+				// only change [24]
+				_publicInputs[23] = validParams.publicInputs[23];
+				_publicInputs[24] = "100";
 
 				await expect(
 					encryptedERC

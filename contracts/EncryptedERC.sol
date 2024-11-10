@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: SEE LICENSE IN LICENSE
 pragma solidity 0.8.27;
+
 // contracts
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {TokenTracker} from "./TokenTracker.sol";
@@ -12,7 +13,7 @@ import {BabyJubJub} from "./libraries/BabyJubJub.sol";
 import {CreateEncryptedERCParams, Point, EGCT, EncryptedBalance, AmountPCT} from "./types/Types.sol";
 
 // errors
-import {UserNotRegistered, UnauthorizedAccess, AuditorKeyNotSet, InvalidProof, InvalidOperation, TransferFailed, TokenDecimalsTooLow} from "./errors/Errors.sol";
+import {UserNotRegistered, UnauthorizedAccess, AuditorKeyNotSet, InvalidProof, InvalidOperation, TransferFailed, UnknownToken} from "./errors/Errors.sol";
 
 // interfaces
 import {IRegistrar} from "./interfaces/IRegistrar.sol";
@@ -83,7 +84,7 @@ contract EncryptedERC is TokenTracker, Ownable, EncryptedUserBalances {
     event PrivateMint(
         address indexed user,
         uint256[7] auditorPCT,
-        address auditorAddress
+        address indexed auditorAddress
     );
 
     /**
@@ -95,7 +96,7 @@ contract EncryptedERC is TokenTracker, Ownable, EncryptedUserBalances {
     event PrivateBurn(
         address indexed user,
         uint256[7] auditorPCT,
-        address auditorAddress
+        address indexed auditorAddress
     );
 
     /**
@@ -109,7 +110,7 @@ contract EncryptedERC is TokenTracker, Ownable, EncryptedUserBalances {
         address indexed from,
         address indexed to,
         uint256[7] auditorPCT,
-        address auditorAddress
+        address indexed auditorAddress
     );
 
     /**
@@ -126,9 +127,44 @@ contract EncryptedERC is TokenTracker, Ownable, EncryptedUserBalances {
         uint256 tokenId
     );
 
+    /**
+     * @param user Address of the user
+     * @param amount Amount of the withdrawal
+     * @param tokenId Token ID
+     * @dev Emitted when a private withdrawal occurs
+     */
+    event Withdraw(address indexed user, uint256 amount, uint256 tokenId);
+
     ///////////////////////////////////////////////////
     ///                   Public                    ///
     ///////////////////////////////////////////////////
+
+    /**
+     *
+     * @param _user Address of the user
+     *
+     * @dev Sets the auditor's public key
+     */
+    function setAuditorPublicKey(address _user) external onlyOwner {
+        if (!registrar.isUserRegistered(_user)) {
+            revert UserNotRegistered();
+        }
+
+        address oldAuditor = auditor;
+        uint256[2] memory publicKey = registrar.getUserPublicKey(_user);
+
+        auditor = _user;
+        auditorPublicKey = Point({X: publicKey[0], Y: publicKey[1]});
+
+        emit AuditorChanged(oldAuditor, _user);
+    }
+
+    /**
+     * @return bool returns true if the auditor public key is set
+     */
+    function isAuditorKeySet() public view returns (bool) {
+        return auditorPublicKey.X != 0 && auditorPublicKey.Y != 1;
+    }
 
     /**
      * @param _user Address of the user
@@ -306,33 +342,6 @@ contract EncryptedERC is TokenTracker, Ownable, EncryptedUserBalances {
         }
     }
 
-    /**
-     *
-     * @param _user Address of the user
-     *
-     * @dev Sets the auditor's public key
-     */
-    function setAuditorPublicKey(address _user) external onlyOwner {
-        if (!registrar.isUserRegistered(_user)) {
-            revert UserNotRegistered();
-        }
-
-        address oldAuditor = auditor;
-        uint256[2] memory publicKey = registrar.getUserPublicKey(_user);
-
-        auditor = _user;
-        auditorPublicKey = Point({X: publicKey[0], Y: publicKey[1]});
-
-        emit AuditorChanged(oldAuditor, _user);
-    }
-
-    /**
-     * @return bool returns true if the auditor public key is set
-     */
-    function isAuditorKeySet() public view returns (bool) {
-        return auditorPublicKey.X != 0 && auditorPublicKey.Y != 1;
-    }
-
     ///////////////////////////////////////////////////
     ///                   Internal                 ///
     ///////////////////////////////////////////////////
@@ -360,52 +369,6 @@ contract EncryptedERC is TokenTracker, Ownable, EncryptedUserBalances {
         _addToUserBalance(_user, tokenId, eGCT, _amountPCT);
 
         emit PrivateMint(_user, _auditorPCT, auditor);
-    }
-
-    /**
-     * @param _user Address of the user
-     * @param input Public inputs for the proof
-     * @param _balancePCT Balance PCT
-     */
-    function _privateBurn(
-        address _user,
-        uint256[19] calldata input,
-        uint256[7] calldata _balancePCT
-    ) internal {
-        EGCT memory providedBalance = EGCT({
-            c1: Point({X: input[2], Y: input[3]}),
-            c2: Point({X: input[4], Y: input[5]})
-        });
-
-        uint256 balanceHash = _hashEGCT(providedBalance);
-        (bool isValid, uint256 transactionIndex) = _isBalanceValid(
-            _user,
-            0,
-            balanceHash
-        );
-        if (!isValid) {
-            revert InvalidProof();
-        }
-
-        EGCT memory encryptedBurnAmount = EGCT({
-            c1: Point({X: input[6], Y: input[7]}),
-            c2: Point({X: input[8], Y: input[9]})
-        });
-
-        _subtractFromUserBalance(
-            _user,
-            0,
-            encryptedBurnAmount,
-            _balancePCT,
-            transactionIndex
-        );
-
-        uint256[7] memory auditorPCT;
-        for (uint256 i = 0; i < 7; i++) {
-            auditorPCT[i] = input[12 + i];
-        }
-
-        emit PrivateBurn(_user, auditorPCT, auditor);
     }
 
     /**
@@ -514,13 +477,114 @@ contract EncryptedERC is TokenTracker, Ownable, EncryptedUserBalances {
         emit Deposit(to, _amount, dust, tokenId);
     }
 
+    /**
+     * @param _amount Amount to withdraw
+     * @param _tokenId Token ID
+     * @param proof Proof
+     * @param input Public inputs for the proof
+     * @param _balancePCT Balance PCT
+     *
+     * @dev Withdraws the encrypted amount to the ERC20 token
+     */
     function withdraw(
         uint256 _amount,
         uint256 _tokenId,
         uint256[8] calldata proof,
         uint256[20] calldata input,
         uint256[7] memory _balancePCT
-    ) public {}
+    ) public {
+        address from = msg.sender;
+
+        // revert if contract is not a converter
+        if (!isConverter) {
+            revert InvalidOperation();
+        }
+
+        {
+            // public key should match
+            uint256[2] memory publicKey = registrar.getUserPublicKey(from);
+            if (publicKey[0] != input[0] || publicKey[1] != input[1]) {
+                revert InvalidProof();
+            }
+        }
+
+        {
+            // _amount should match with the amount in the proof
+            if (_amount != input[19]) {
+                revert InvalidProof();
+            }
+        }
+
+        {
+            // auditor public key should match
+            if (
+                auditorPublicKey.X != input[10] ||
+                auditorPublicKey.Y != input[11]
+            ) {
+                revert InvalidProof();
+            }
+        }
+
+        // verify the proof
+        withdrawVerifier.verifyProof(proof, input);
+
+        _withdraw(from, _amount, _tokenId, input, _balancePCT);
+
+        {
+            uint256[7] memory auditorPCT;
+            for (uint256 i = 0; i < 7; i++) {
+                auditorPCT[i] = input[12 + i];
+            }
+
+            emit Withdraw(from, _amount, _tokenId);
+        }
+    }
+
+    function _withdraw(
+        address _from,
+        uint256 _amount,
+        uint256 _tokenId,
+        uint256[20] calldata input,
+        uint256[7] memory _balancePCT
+    ) internal {
+        address tokenAddress = tokenAddresses[_tokenId];
+        if (tokenAddress == address(0)) {
+            revert UnknownToken();
+        }
+
+        {
+            EGCT memory providedBalance = EGCT({
+                c1: Point({X: input[2], Y: input[3]}),
+                c2: Point({X: input[4], Y: input[5]})
+            });
+
+            uint256 balanceHash = _hashEGCT(providedBalance);
+            (bool isValid, uint256 transactionIndex) = _isBalanceValid(
+                _from,
+                _tokenId,
+                balanceHash
+            );
+
+            if (!isValid) {
+                revert InvalidProof();
+            }
+
+            EGCT memory encryptedWithdrawnAmount = EGCT({
+                c1: Point({X: input[6], Y: input[7]}),
+                c2: Point({X: input[8], Y: input[9]})
+            });
+
+            _subtractFromUserBalance(
+                _from,
+                _tokenId,
+                encryptedWithdrawnAmount,
+                _balancePCT,
+                transactionIndex
+            );
+        }
+
+        _convertTo(_from, _amount, tokenAddress);
+    }
 
     /**
      *
@@ -528,11 +592,10 @@ contract EncryptedERC is TokenTracker, Ownable, EncryptedUserBalances {
      * @param _amount Amount to convert
      * @param _tokenAddress Token address
      *
-     * @dev Converts the ERC20 token to the native token
-     * @dev Converts the amount by changing the decimals
+     * @dev Converts the ERC20 token to the encrypted ERC20 token
      * @dev Also checks if this token is already added, if not adds it
      *
-     * Returns dust and tokenId
+     * @return dust and tokenId
      */
     function _convertFrom(
         address _to,
@@ -542,22 +605,19 @@ contract EncryptedERC is TokenTracker, Ownable, EncryptedUserBalances {
     ) internal returns (uint256 dust, uint256 tokenId) {
         uint8 tokenDecimals = IERC20Metadata(_tokenAddress).decimals();
 
-        uint256 value;
+        uint256 value = _amount;
+        dust = 0;
+
         if (tokenDecimals > decimals) {
-            // scale up
             uint256 scalingFactor = 10 ** (tokenDecimals - decimals);
             value = _amount / scalingFactor;
             dust = _amount % scalingFactor;
         } else if (tokenDecimals < decimals) {
-            // scale down
             uint256 scalingFactor = 10 ** (decimals - tokenDecimals);
             value = _amount * scalingFactor;
             dust = 0;
-        } else {
-            // no scaling needed
-            value = _amount;
-            dust = 0;
         }
+
         // check if it's a new token
         if (tokenIds[_tokenAddress] == 0) {
             _addToken(_tokenAddress);
@@ -594,5 +654,28 @@ contract EncryptedERC is TokenTracker, Ownable, EncryptedUserBalances {
         }
 
         return (dust, tokenId);
+    }
+
+    function _convertTo(
+        address _to,
+        uint256 _amount,
+        address _tokenAddress
+    ) internal {
+        uint256 tokenDecimals = IERC20Metadata(_tokenAddress).decimals();
+
+        uint256 value = _amount;
+        uint256 scalingFactor = 0;
+
+        if (tokenDecimals > decimals) {
+            scalingFactor = 10 ** (tokenDecimals - decimals);
+            value = _amount * scalingFactor;
+        } else if (tokenDecimals < decimals) {
+            scalingFactor = 10 ** (decimals - tokenDecimals);
+            value = _amount / scalingFactor;
+        }
+
+        // transfer the token to the user
+        IERC20 token = IERC20(_tokenAddress);
+        token.transfer(_to, value);
     }
 }

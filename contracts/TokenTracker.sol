@@ -7,8 +7,13 @@ contract TokenTracker {
     // indicates if the contract is a converter
     bool public isConverter;
 
+    // token address to token id
     mapping(address tokenAddress => uint256 tokenId) public tokenIds;
 
+    // token id to token address
+    mapping(uint256 tokenId => address tokenAddress) public tokenAddresses;
+
+    // array of token addresses
     address[] public tokens;
 
     constructor(bool _isConverter) {
@@ -29,6 +34,7 @@ contract TokenTracker {
     function _addToken(address tokenAddress) internal {
         uint256 newTokenId = nextTokenId;
         tokenIds[tokenAddress] = newTokenId;
+        tokenAddresses[newTokenId] = tokenAddress;
         tokens.push(tokenAddress);
         nextTokenId++;
     }
