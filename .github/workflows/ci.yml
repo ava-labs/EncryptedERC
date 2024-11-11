@@ -35,7 +35,7 @@ jobs:
         with:
           go-version: ${{ matrix.go-version }}
 
-      - run: git config --global url.https://$GH_ACCESS_TOKEN@github.com/.insteadOf https://github.com/
+      - run: git config --global url."https://$GH_ACCESS_TOKEN@github.com/".insteadOf "https://github.com/"
 
       - name: "Install Golang dependencies"
         run: "cd zk && make"
