@@ -9,13 +9,17 @@ const main = async () => {
 	const DECIMALS = 4;
 	const [deployer] = await ethers.getSigners();
 
-	const { registrationVerifier, mintVerifier, burnVerifier, transferVerifier } =
-		await deployVerifiers(deployer);
+	const {
+		registrationVerifier,
+		mintVerifier,
+		withdrawVerifier,
+		transferVerifier,
+	} = await deployVerifiers(deployer);
 
 	console.log("---- Verifiers ----");
 	console.log(`RegistrationVerifier  : ${registrationVerifier}`);
 	console.log(`MintVerifier          : ${mintVerifier}`);
-	console.log(`BurnVerifier          : ${burnVerifier}`);
+	console.log(`WithdrawVerifier      : ${withdrawVerifier}`);
 	console.log(`TransferVerifier      : ${transferVerifier}`);
 
 	const babyJubJub = await deployLibrary(deployer);
@@ -36,7 +40,7 @@ const main = async () => {
 		_name: "Encrypted ERC",
 		_symbol: "EERC",
 		_mintVerifier: mintVerifier,
-		_burnVerifier: burnVerifier,
+		_withdrawVerifier: withdrawVerifier,
 		_transferVerifier: transferVerifier,
 		_decimals: DECIMALS,
 	});
