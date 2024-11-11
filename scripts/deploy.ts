@@ -3,6 +3,7 @@ import { deployLibrary, deployVerifiers } from "../test/helpers";
 import {
 	EncryptedERC__factory,
 	Registrar__factory,
+	SimpleERC20__factory,
 } from "../typechain-types/factories/contracts";
 
 const main = async () => {
@@ -31,6 +32,19 @@ const main = async () => {
 	console.log("---- Registrar ----");
 	console.log(`Registrar             : ${registrar.target}`);
 
+	const erc20Factory = new SimpleERC20__factory(deployer);
+	const erc20 = await erc20Factory.deploy("Test", "TEST", DECIMALS);
+	await erc20.waitForDeployment();
+	console.log("---- ERC20 ----");
+	console.log(`ERC20                 : ${erc20.target}`);
+	{
+		const tx = await erc20
+			.connect(deployer)
+			.mint(deployer.address, 1000000000000000000000000000n);
+		await tx.wait();
+		console.log("Minted 1000000000000000000000000000 to deployer");
+	}
+
 	const encryptedERCFactory = new EncryptedERC__factory({
 		"contracts/libraries/BabyJubJub.sol:BabyJubJub": babyJubJub,
 	});
@@ -45,6 +59,14 @@ const main = async () => {
 		_decimals: DECIMALS,
 	});
 	await encryptedERC.waitForDeployment();
+
+	{
+		const tx = await erc20
+			.connect(deployer)
+			.approve(encryptedERC.target, 10000000000000000000000n);
+		await tx.wait();
+		console.log("Approved 10000000000000000000000n to EncryptedERC Contract");
+	}
 
 	console.log("---- EncryptedERC ----");
 	console.log(`EncryptedERC          : ${encryptedERC.target}`);

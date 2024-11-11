@@ -435,6 +435,34 @@ contract EncryptedERC is TokenTracker, Ownable, EncryptedUserBalances {
     ///////////////////////////////////////////////////
 
     /**
+     * @param _user Address of the user
+     * @param _tokenAddress Token address
+     * @return eGCT Elgamal Ciphertext
+     * @return nonce Nonce
+     * @return amountPCTs Amount PCTs
+     * @return balancePCT Balance PCT
+     * @return transactionIndex Transaction index
+     * @dev returns the corresponding balance for the token address
+     */
+    function getBalanceFromTokenAddress(
+        address _user,
+        address _tokenAddress
+    )
+        public
+        view
+        returns (
+            EGCT memory eGCT,
+            uint256 nonce,
+            AmountPCT[] memory amountPCTs,
+            uint256[7] memory balancePCT,
+            uint256 transactionIndex
+        )
+    {
+        uint256 tokenId = tokenIds[_tokenAddress];
+        return balanceOf(_user, tokenId);
+    }
+
+    /**
      *
      * @param _amount Amount to deposit
      * @param _tokenAddress Token address
@@ -540,6 +568,13 @@ contract EncryptedERC is TokenTracker, Ownable, EncryptedUserBalances {
         }
     }
 
+    /**
+     * @param _from Address of the sender
+     * @param _amount Amount to withdraw
+     * @param _tokenId Token ID
+     * @param input Public inputs for the proof
+     * @param _balancePCT Balance PCT
+     */
     function _withdraw(
         address _from,
         uint256 _amount,
@@ -656,6 +691,13 @@ contract EncryptedERC is TokenTracker, Ownable, EncryptedUserBalances {
         return (dust, tokenId);
     }
 
+    /**
+     * @param _to Address of the receiver
+     * @param _amount Amount to convert
+     * @param _tokenAddress Token address
+     *
+     * @dev Converts the encrypted ERC20 token to the ERC20 token
+     */
     function _convertTo(
         address _to,
         uint256 _amount,
