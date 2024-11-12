@@ -518,7 +518,7 @@ contract EncryptedERC is TokenTracker, Ownable, EncryptedUserBalances {
         uint256 _amount,
         uint256 _tokenId,
         uint256[8] calldata proof,
-        uint256[20] calldata input,
+        uint256[16] calldata input,
         uint256[7] memory _balancePCT
     ) public {
         address from = msg.sender;
@@ -538,7 +538,7 @@ contract EncryptedERC is TokenTracker, Ownable, EncryptedUserBalances {
 
         {
             // _amount should match with the amount in the proof
-            if (_amount != input[19]) {
+            if (_amount != input[15]) {
                 revert InvalidProof();
             }
         }
@@ -546,8 +546,7 @@ contract EncryptedERC is TokenTracker, Ownable, EncryptedUserBalances {
         {
             // auditor public key should match
             if (
-                auditorPublicKey.X != input[10] ||
-                auditorPublicKey.Y != input[11]
+                auditorPublicKey.X != input[6] || auditorPublicKey.Y != input[7]
             ) {
                 revert InvalidProof();
             }
@@ -561,7 +560,7 @@ contract EncryptedERC is TokenTracker, Ownable, EncryptedUserBalances {
         {
             uint256[7] memory auditorPCT;
             for (uint256 i = 0; i < 7; i++) {
-                auditorPCT[i] = input[12 + i];
+                auditorPCT[i] = input[8 + i];
             }
 
             emit Withdraw(from, _amount, _tokenId);
@@ -579,7 +578,7 @@ contract EncryptedERC is TokenTracker, Ownable, EncryptedUserBalances {
         address _from,
         uint256 _amount,
         uint256 _tokenId,
-        uint256[20] calldata input,
+        uint256[16] calldata input,
         uint256[7] memory _balancePCT
     ) internal {
         address tokenAddress = tokenAddresses[_tokenId];
@@ -604,10 +603,10 @@ contract EncryptedERC is TokenTracker, Ownable, EncryptedUserBalances {
                 revert InvalidProof();
             }
 
-            EGCT memory encryptedWithdrawnAmount = EGCT({
-                c1: Point({X: input[6], Y: input[7]}),
-                c2: Point({X: input[8], Y: input[9]})
-            });
+            EGCT memory encryptedWithdrawnAmount = BabyJubJub.encrypt(
+                Point({X: input[0], Y: input[1]}),
+                _amount
+            );
 
             _subtractFromUserBalance(
                 _from,

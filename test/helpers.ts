@@ -330,9 +330,6 @@ export const withdraw = async (
 	const newBalance = userBalance - amount;
 	const userPublicKey = user.publicKey;
 
-	// 1. encrypt the withdraw amount with el-gamal
-	const { cipher: encryptedAmount } = encryptMessage(userPublicKey, amount);
-
 	// 2. create pct for the user with the newly calculated balance
 	const {
 		ciphertext: userCiphertext,
@@ -351,8 +348,6 @@ export const withdraw = async (
 	const publicInputs = [
 		...userPublicKey.map(String),
 		...userEncryptedBalance.map(String),
-		...encryptedAmount[0].map(String),
-		...encryptedAmount[1].map(String),
 		...auditorPublicKey.map(String),
 		...auditorCiphertext.map(String),
 		...auditorAuthKey.map(String),

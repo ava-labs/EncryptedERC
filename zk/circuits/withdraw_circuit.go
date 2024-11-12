@@ -7,7 +7,7 @@ import (
 )
 
 type WithdrawCircuit struct {
-	Sender      Sender
+	Sender      WithdrawSender
 	Auditor     Auditor
 	ValueToBurn frontend.Variable `gnark:",public"`
 }
@@ -20,13 +20,18 @@ func (circuit *WithdrawCircuit) Define(api frontend.API) error {
 	api.AssertIsLessOrEqual(circuit.ValueToBurn, circuit.Sender.Balance)
 
 	// Verify sender's public key is well-formed
-	CheckPublicKey(api, babyjub, circuit.Sender)
+	CheckPublicKey(api, babyjub, Sender{
+		PrivateKey: circuit.Sender.PrivateKey,
+		PublicKey:  circuit.Sender.PublicKey,
+	})
 
 	// Verify sender's encrypted balance is well-formed
-	CheckBalance(api, babyjub, circuit.Sender)
-
-	// Verify sender's encrypted value is the negated burn amount
-	CheckPositiveValue(api, babyjub, circuit.Sender, circuit.ValueToBurn)
+	CheckBalance(api, babyjub, Sender{
+		PrivateKey:  circuit.Sender.PrivateKey,
+		PublicKey:   circuit.Sender.PublicKey,
+		Balance:     circuit.Sender.Balance,
+		BalanceEGCT: circuit.Sender.BalanceEGCT,
+	})
 
 	// Verify auditor's encrypted summary includes the burn amount and is encrypted with the auditor's public key
 	CheckPCTAuditor(api, babyjub, circuit.Auditor, circuit.ValueToBurn)

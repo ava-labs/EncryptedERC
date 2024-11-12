@@ -244,7 +244,7 @@ describe("EncryptedERC - Standalone", () => {
 						1000n,
 						1n,
 						Array.from({ length: 8 }, () => 1n),
-						Array.from({ length: 20 }, () => 1n),
+						Array.from({ length: 16 }, () => 1n),
 						Array.from({ length: 7 }, () => 1n),
 					),
 				).to.be.revertedWithCustomError(encryptedERC, "InvalidOperation");

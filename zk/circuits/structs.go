@@ -13,6 +13,13 @@ type Sender struct {
 	ValueEGCT   ElGamalCiphertext
 }
 
+type WithdrawSender struct {
+	PrivateKey  frontend.Variable
+	PublicKey   PublicKey
+	Balance     frontend.Variable
+	BalanceEGCT ElGamalCiphertext
+}
+
 type Receiver struct {
 	PublicKey   PublicKey
 	ValueEGCT   ElGamalCiphertext

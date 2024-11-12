@@ -376,9 +376,9 @@ describe("EncryptedERC - Converter", () => {
 
 			it("should initialize user balance to 0", async () => {
 				const ownerUser = users[0];
-				const balance = await encryptedERC.balanceOf(
+				const balance = await encryptedERC.getBalanceFromTokenAddress(
 					ownerUser.signer.address,
-					2,
+					erc20s[0].target,
 				);
 
 				const totalBalance = await getDecryptedBalance(
@@ -714,8 +714,8 @@ describe("EncryptedERC - Converter", () => {
 
 			it("should revert if auditor public key is not matching", async () => {
 				const _publicInputs = [...validProof.publicInputs];
-				_publicInputs[10] = "0";
-				_publicInputs[11] = "0";
+				_publicInputs[6] = "0";
+				_publicInputs[7] = "0";
 
 				await expect(
 					encryptedERC
