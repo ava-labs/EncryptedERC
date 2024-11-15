@@ -200,6 +200,11 @@ library Pairing {
 }
 
 contract ProductionTransferVerifier {
+    /// The proof is invalid.
+    /// @dev This can mean that provided Groth16 proof points are not on their
+    /// curves, that pairing equation fails, or that the proof is not for the
+    /// provided public input.
+    error ProofInvalid();
     using Pairing for *;
 
     uint256 constant SNARK_SCALAR_FIELD =
@@ -311,12 +316,12 @@ contract ProductionTransferVerifier {
      * @returns Whether the proof is valid given the hardcoded verifying key
      *          above and the public inputs
      */
-    function verifyProof(
+    function verifyProof_internal(
         uint256[2] memory a,
         uint256[2][2] memory b,
         uint256[2] memory c,
         uint256[32] calldata input
-    ) public view returns (bool r) {
+    ) internal view returns (bool r) {
         Proof memory proof;
         proof.A = Pairing.G1Point(a[0], a[1]);
         proof.B = Pairing.G2Point([b[0][0], b[0][1]], [b[1][0], b[1][1]]);
@@ -633,5 +638,17 @@ contract ProductionTransferVerifier {
                 proof.C,
                 vk.delta2
             );
+    }
+
+    function verifyProof(
+        uint256[8] calldata proof,
+        uint256[32] calldata input
+    ) public view {
+        uint256[2] memory a = [proof[0], proof[1]];
+        uint256[2][2] memory b = [[proof[2], proof[3]], [proof[4], proof[5]]];
+        uint256[2] memory c = [proof[6], proof[7]];
+
+        bool result = verifyProof_internal(a, b, c, input);
+        if (!result) revert ProofInvalid();
     }
 }
