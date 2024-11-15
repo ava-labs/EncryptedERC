@@ -1,5 +1,4 @@
 export GO111MODULE=on
-export GOPRIVATE=github.com/ava-labs/ac-etracrypto
 
 SOURCE_DIRS = cmd pkg
 

@@ -3,8 +3,8 @@ package main
 import (
 	"flag"
 
-	"github.com/ava-labs/EncryptedERC/hardhat"
-	"github.com/ava-labs/ac-etracrypto/helpers"
+	"github.com/ava-labs/EncryptedERC/pkg/hardhat"
+	"github.com/ava-labs/EncryptedERC/pkg/helpers"
 )
 
 /*

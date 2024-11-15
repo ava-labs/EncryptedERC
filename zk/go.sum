@@ -1,5 +1,3 @@
-github.com/ava-labs/ac-etracrypto v1.0.1 h1:jP9Vd7zUn8XRtWT3PXSbrK8vv86o2heBvlIsG1JmASA=
-github.com/ava-labs/ac-etracrypto v1.0.1/go.mod h1:rq3tkJvT30lOuMUDo2qoE9GIrcc9Jq8CASar0l9ve10=
 github.com/bits-and-blooms/bitset v1.14.2 h1:YXVoyPndbdvcEVcseEovVfp0qjJp7S+i5+xgp/Nfbdc=
 github.com/bits-and-blooms/bitset v1.14.2/go.mod h1:7hO7Gc7Pp1vODcmWvKMRA9BNmbv6a/7QIWpPxHddWR8=
 github.com/blang/semver/v4 v4.0.0 h1:1PFHFE6yCCTv8C1TeyNNarDzntLi7wMI5i/pzqYIsAM=

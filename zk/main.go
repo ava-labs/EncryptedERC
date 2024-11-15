@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"math/big"
 
-	"github.com/ava-labs/EncryptedERC/circuits"
-	"github.com/ava-labs/EncryptedERC/utils"
+	"github.com/ava-labs/EncryptedERC/pkg/circuits"
+	"github.com/ava-labs/EncryptedERC/pkg/utils"
 
 	"github.com/consensys/gnark-crypto/ecc"
 	"github.com/consensys/gnark/backend/groth16"

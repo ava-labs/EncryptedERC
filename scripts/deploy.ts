@@ -50,7 +50,7 @@ const main = async () => {
 	});
 	const encryptedERC = await encryptedERCFactory.connect(deployer).deploy({
 		_registrar: registrar.target,
-		_isConverter: false, // lets leave it false for now
+		_isConverter: true, // lets leave it false for now
 		_name: "Encrypted ERC",
 		_symbol: "EERC",
 		_mintVerifier: mintVerifier,

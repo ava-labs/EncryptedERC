@@ -3,7 +3,6 @@ module github.com/ava-labs/EncryptedERC
 go 1.22.6
 
 require (
-	github.com/ava-labs/ac-etracrypto v1.0.1
 	github.com/consensys/gnark v0.11.0
 	github.com/consensys/gnark-crypto v0.14.0
 	github.com/iden3/go-iden3-crypto v0.0.17
