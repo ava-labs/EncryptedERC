@@ -39,8 +39,8 @@ jobs:
       - name: "Install the dependencies"
         run: "npm install"
 
-      - name: "Test the protocol"
-        run: "npx hardhat test"
+      - name: "Coverage"
+        run: "npx hardhat coverage"
 
       - name: "Add test summary"
         run: |
