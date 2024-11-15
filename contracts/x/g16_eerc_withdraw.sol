@@ -199,7 +199,7 @@ library Pairing {
     }
 }
 
-contract ProductionBurnVerifier {
+contract ProductionWithdrawVerifier {
     /// The proof is invalid.
     /// @dev This can mean that provided Groth16 proof points are not on their
     /// curves, that pairing equation fails, or that the proof is not for the
