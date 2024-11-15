@@ -21,7 +21,12 @@
 
 pragma solidity ^0.8.0;
 
-library Pairing {
+contract ProductionRegisterVerifier {
+    ////////////////////////////////////////////////////////////////////////////////////
+    ////////////////////////////                                    ////////////////////
+    ////////////////////////////        PAIRING LIBRARY             ////////////////////
+    ////////////////////////////                                    ////////////////////
+    ////////////////////////////////////////////////////////////////////////////////////
     uint256 constant PRIME_Q =
         21888242871839275222246405745257275088696311157297823662689037894645226208583;
 
@@ -197,37 +202,38 @@ library Pairing {
 
         return out[0] != 0;
     }
-}
 
-contract ProductionRegisterVerifier {
+    ////////////////////////////////////////////////////////////////////////////////////
+    ////////////////////////////                                    ////////////////////
+    ////////////////////////////        PAIRING LIBRARY             ////////////////////
+    ////////////////////////////                                    ////////////////////
+    ////////////////////////////////////////////////////////////////////////////////////
+
     /// The proof is invalid.
     /// @dev This can mean that provided Groth16 proof points are not on their
     /// curves, that pairing equation fails, or that the proof is not for the
     /// provided public input.
     error ProofInvalid();
-    using Pairing for *;
 
     uint256 constant SNARK_SCALAR_FIELD =
         21888242871839275222246405745257275088548364400416034343698204186575808495617;
-    uint256 constant PRIME_Q =
-        21888242871839275222246405745257275088696311157297823662689037894645226208583;
 
     struct VerifyingKey {
-        Pairing.G1Point alfa1;
-        Pairing.G2Point beta2;
-        Pairing.G2Point gamma2;
-        Pairing.G2Point delta2;
+        G1Point alfa1;
+        G2Point beta2;
+        G2Point gamma2;
+        G2Point delta2;
         // []G1Point IC (K in gnark) appears directly in verifyProof
     }
 
     struct Proof {
-        Pairing.G1Point A;
-        Pairing.G2Point B;
-        Pairing.G1Point C;
+        G1Point A;
+        G2Point B;
+        G1Point C;
     }
 
     function verifyingKey() internal pure returns (VerifyingKey memory vk) {
-        vk.alfa1 = Pairing.G1Point(
+        vk.alfa1 = G1Point(
             uint256(
                 14019915120339760148944621305947703338187663883040385939532489611329826236109
             ),
@@ -235,7 +241,7 @@ contract ProductionRegisterVerifier {
                 9776667810291150141846257490258687884252497726015607017804549787651926015630
             )
         );
-        vk.beta2 = Pairing.G2Point(
+        vk.beta2 = G2Point(
             [
                 uint256(
                     12287413116196492984252217061779436489071173385424752755523065281360736342893
@@ -253,7 +259,7 @@ contract ProductionRegisterVerifier {
                 )
             ]
         );
-        vk.gamma2 = Pairing.G2Point(
+        vk.gamma2 = G2Point(
             [
                 uint256(
                     3860877445527284832091973916081025496089048675150605327748805331584455624772
@@ -271,7 +277,7 @@ contract ProductionRegisterVerifier {
                 )
             ]
         );
-        vk.delta2 = Pairing.G2Point(
+        vk.delta2 = G2Point(
             [
                 uint256(
                     4192308887887504135605275140932939222882261104522876979393443676180877762343
@@ -295,12 +301,12 @@ contract ProductionRegisterVerifier {
     // that is computes sets q = (mul_input[0:2] * mul_input[3]) + q
     function accumulate(
         uint256[3] memory mul_input,
-        Pairing.G1Point memory p,
+        G1Point memory p,
         uint256[4] memory buffer,
-        Pairing.G1Point memory q
+        G1Point memory q
     ) internal view {
         // computes p = mul_input[0:2] * mul_input[3]
-        Pairing.scalar_mul_raw(mul_input, p);
+        scalar_mul_raw(mul_input, p);
 
         // point addition inputs
         buffer[0] = q.X;
@@ -309,7 +315,7 @@ contract ProductionRegisterVerifier {
         buffer[3] = p.Y;
 
         // q = p + q
-        Pairing.plus_raw(buffer, q);
+        plus_raw(buffer, q);
     }
 
     /*
@@ -323,9 +329,9 @@ contract ProductionRegisterVerifier {
         uint256[2] calldata input
     ) internal view returns (bool r) {
         Proof memory proof;
-        proof.A = Pairing.G1Point(a[0], a[1]);
-        proof.B = Pairing.G2Point([b[0][0], b[0][1]], [b[1][0], b[1][1]]);
-        proof.C = Pairing.G1Point(c[0], c[1]);
+        proof.A = G1Point(a[0], a[1]);
+        proof.B = G2Point([b[0][0], b[0][1]], [b[1][0], b[1][1]]);
+        proof.C = G1Point(c[0], c[1]);
 
         // Make sure that proof.A, B, and C are each less than the prime q
         require(proof.A.X < PRIME_Q, "verifier-aX-gte-prime-q");
@@ -351,7 +357,7 @@ contract ProductionRegisterVerifier {
         VerifyingKey memory vk = verifyingKey();
 
         // Compute the linear combination vk_x
-        Pairing.G1Point memory vk_x = Pairing.G1Point(0, 0);
+        G1Point memory vk_x = G1Point(0, 0);
 
         // Buffer reused for addition p1 + p2 to avoid memory allocations
         // [0:2] -> p1.X, p1.Y ; [2:4] -> p2.X, p2.Y
@@ -362,7 +368,7 @@ contract ProductionRegisterVerifier {
         uint256[3] memory mul_input;
 
         // temporary point to avoid extra allocations in accumulate
-        Pairing.G1Point memory q = Pairing.G1Point(0, 0);
+        G1Point memory q = G1Point(0, 0);
 
         vk_x.X = uint256(
             4877897880482445950263106915493835515438929434278809558098945830777060812417
@@ -388,8 +394,8 @@ contract ProductionRegisterVerifier {
         accumulate(mul_input, q, add_input, vk_x); // vk_x += vk.K[2] * input[1]
 
         return
-            Pairing.pairing(
-                Pairing.negate(proof.A),
+            pairing(
+                negate(proof.A),
                 proof.B,
                 vk.alfa1,
                 vk.beta2,
