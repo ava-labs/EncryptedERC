@@ -2,8 +2,6 @@ name: "CI"
 
 env:
   DOTENV_CONFIG_PATH: "./.env.example"
-  GOPRIVATE: "github.com/ava-labs/ac-etracrypto"
-  GH_ACCESS_TOKEN: ${{ secrets.ACETRACRYPTO_PRIVATE_SSH_KEY }}
   HARDHAT_VAR_MNEMONIC: "test test test test test test test test test test test junk"
 
 on:
@@ -34,8 +32,6 @@ jobs:
         uses: actions/setup-go@v4
         with:
           go-version: ${{ matrix.go-version }}
-
-      - run: git config --global url."https://$GH_ACCESS_TOKEN@github.com/".insteadOf "https://github.com/"
 
       - name: "Install Golang dependencies"
         run: "cd zk && make"
