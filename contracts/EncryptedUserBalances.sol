@@ -8,16 +8,40 @@ pragma solidity 0.8.27;
 import {EncryptedBalance, EGCT, BalanceHistory, AmountPCT} from "./types/Types.sol";
 import {BabyJubJub} from "./libraries/BabyJubJub.sol";
 
+/**
+ * @title EncryptedUserBalances
+ * @notice Contract for managing encrypted user balances in the privacy-preserving ERC system
+ * @dev This contract handles:
+ *      1. Storage and retrieval of encrypted balances
+ *      2. Balance history tracking for transaction validation
+ *      3. Cryptographic operations on encrypted balances
+ *
+ * The contract uses ElGamal encryption (EGCT) to store balances privately,
+ * allowing users to prove they have sufficient funds without revealing the actual amount.
+ */
 contract EncryptedUserBalances {
+    ///////////////////////////////////////////////////
+    ///                   State Variables           ///
+    ///////////////////////////////////////////////////
+
+    /// @notice Mapping of user addresses to their encrypted balances for each token
+    /// @dev Structure: user => tokenId => EncryptedBalance
     mapping(address user => mapping(uint256 tokenId => EncryptedBalance balance))
         public balances;
 
+    ///////////////////////////////////////////////////
+    ///                   External                  ///
+    ///////////////////////////////////////////////////
+
     /**
-     *
-     * @param user User address
-     * @return eGCT Elgamal Ciphertext
-     * @return nonce Nonce
-     * @dev Returns the balance of the user for the standalone token (tokenId = 0)
+     * @notice Returns the encrypted balance for a user's standalone token
+     * @param user The address of the user
+     * @return eGCT The ElGamal ciphertext representing the encrypted balance
+     * @return nonce The current nonce used for balance validation
+     * @return amountPCTs Array of amount PCT
+     * @return balancePCT The current balance PCT
+     * @return transactionIndex The current transaction index
+     * @dev Since in standalone mode, the tokenId is always 0
      */
     function balanceOfStandalone(
         address user
@@ -36,11 +60,14 @@ contract EncryptedUserBalances {
     }
 
     /**
-     * @param user User address
-     * @param tokenId Token ID
-     * @return eGCT Elgamal Ciphertext
-     * @return nonce Nonce
-     * @dev Returns the balance of the user for the given token
+     * @notice Returns the encrypted balance for a user's specified token
+     * @param user The address of the user
+     * @param tokenId The ID of the token
+     * @return eGCT The ElGamal ciphertext representing the encrypted balance
+     * @return nonce The current nonce used for balance validation
+     * @return amountPCTs Array of amount PCT
+     * @return balancePCT The current balance PCT
+     * @return transactionIndex The current transaction index
      */
     function balanceOf(
         address user,
@@ -67,13 +94,19 @@ contract EncryptedUserBalances {
     }
 
     ///////////////////////////////////////////////////
-    ///               Internal Functions            ///
+    ///                   Internal                  ///
     ///////////////////////////////////////////////////
 
     /**
-     * @param user User address
-     * @param tokenId Token ID
-     * @dev Adds the amount to the user's balance
+     * @notice Adds an encrypted amount to a user's balance
+     * @param user The address of the user
+     * @param tokenId The ID of the token
+     * @param eGCT The ElGamal ciphertext representing the amount to add
+     * @param amountPCT The amount PCT for transaction history
+     * @dev This function:
+     *      1. Initializes the balance if it's the first transaction
+     *      2. Adds the encrypted amount to the existing balance
+     *      3. Updates the user history (by adding new amount PCT)
      */
     function _addToUserBalance(
         address user,
@@ -97,9 +130,16 @@ contract EncryptedUserBalances {
     }
 
     /**
-     * @param user User address
-     * @param tokenId Token ID
-     * @dev Subtracts the amount from the user's balance
+     * @notice Subtracts an encrypted amount from a user's balance
+     * @param user The address of the user
+     * @param tokenId The ID of the token
+     * @param eGCT The ElGamal ciphertext representing the amount to subtract
+     * @param balancePCT The new balance PCT after subtraction
+     * @param transactionIndex The transaction index to delete from history
+     * @dev This function:
+     *      1. Subtracts the encrypted amount from the balance
+     *      2. Updates the user history (by removing the specified transaction)
+     *      3. Updates the balance PCT for user
      */
     function _subtractFromUserBalance(
         address user,
@@ -110,7 +150,6 @@ contract EncryptedUserBalances {
     ) internal {
         EncryptedBalance storage balance = balances[user][tokenId];
 
-        // since we are encrypting the negated amount, we need to add it to the balance
         balance.eGCT.c1 = BabyJubJub._sub(balance.eGCT.c1, eGCT.c1);
         balance.eGCT.c2 = BabyJubJub._sub(balance.eGCT.c2, eGCT.c2);
 
@@ -122,13 +161,19 @@ contract EncryptedUserBalances {
     }
 
     /**
-     * @param user User address
-     * @param tokenId Token ID
-     * @dev Adds the balance hash to the user's history
-     * @dev Hash EGCT with the nonce and mark the result as valid
-     *      every time user send a transaction nonce is increased by 1
-     *      so the balance hash is unique for each transaction and sender must prove
-     *      that the balance hash is known beforehand with the current nonce
+     * @notice Adds a transaction to the user's balance history
+     * @param user The address of the user
+     * @param tokenId The ID of the token
+     * @param amountPCT The amount PCT for the transaction
+     * @dev This function:
+     *      1. Calculates a unique hash for the current balance state
+     *      2. Marks this hash as valid in the balance history
+     *      3. Adds the amount PCT to the transaction history
+     *      4. Increments the transaction index
+     *
+     * The balance hash is unique for each transaction because it includes the nonce,
+     * which is incremented after each transaction. This ensures that each transaction
+     * can be uniquely identified and validated.
      */
     function _addToUserHistory(
         address user,
@@ -156,13 +201,16 @@ contract EncryptedUserBalances {
     }
 
     /**
-     * @param user User address
-     * @param tokenId Token ID
-     * @dev Commits the user's balance
-     * @dev Hash EGCT with the nonce and mark the result as valid
-     *      every time user send a transaction nonce is increased by 1
-     *      so the balance hash is unique for each transaction and sender must prove
-     *      that the balance hash is known beforehand with the current nonce
+     * @notice Commits the current balance state to the user's history
+     * @param user The address of the user
+     * @param tokenId The ID of the token
+     * @dev This function:
+     *      1. Calculates a unique hash for the current balance state
+     *      2. Marks this hash as valid in the balance history
+     *      3. Increments the transaction index
+     *
+     * This is used to create a checkpoint of the balance state after operations
+     * that don't change the balance amount but need to be recorded in history.
      */
     function _commitUserBalance(address user, uint256 tokenId) internal {
         EncryptedBalance storage balance = balances[user][tokenId];
@@ -180,11 +228,17 @@ contract EncryptedUserBalances {
     }
 
     /**
-     * @param user User address
-     * @param tokenId Token ID
-     * @dev Deletes the user's history
-     * @dev Instead of deleting the history mapping one by one, we can just
-     *      increase the nonce by one and the old history will be mark as invalid
+     * @notice Deletes transaction history up to a specific transaction index
+     * @param user The address of the user
+     * @param tokenId The ID of the token
+     * @param transactionIndex The transaction index to delete up to
+     * @dev This function:
+     *      1. Removes amount PCTs from the history up to the specified index
+     *      2. Increments the nonce (invalidate all previous balance hashes)
+     *      3. Commits the new balance state to history
+     *
+     * Instead of deleting individual history entries, this function uses the nonce
+     * to invalidate all previous balance hashes at once, which is more gas efficient.
      */
     function _deleteUserHistory(
         address user,
@@ -210,11 +264,14 @@ contract EncryptedUserBalances {
     }
 
     /**
-     * @param user User address
-     * @param tokenId Token ID
-     * @param balanceHash Balance hash
-     * @return isValid True if the balance hash is valid
-     * @dev Hash the provided eGCT with the current nonce and check if it's in the history
+     * @notice Checks if a balance hash is valid for a user
+     * @param user The address of the user
+     * @param tokenId The ID of the token
+     * @param balanceHash The hash to validate
+     * @return isValid True if the hash is valid, false otherwise
+     * @return index The transaction index associated with the hash
+     * This is used to validate that a user is using a recent and valid balance
+     * in their transactions.
      */
     function _isBalanceValid(
         address user,
@@ -232,8 +289,11 @@ contract EncryptedUserBalances {
     }
 
     /**
-     * @param eGCT Elgamal Ciphertext
-     * @return hash of the Elgamal Ciphertext CRH(eGCT)
+     * @notice Calculates a hash of an ElGamal ciphertext
+     * @param eGCT The ElGamal ciphertext to hash
+     * @return The hash of the ciphertext
+     * @dev This function creates a unique identifier for an encrypted balance
+     *      by hashing all components of the ElGamal ciphertext.
      */
     function _hashEGCT(EGCT memory eGCT) internal pure returns (uint256) {
         return

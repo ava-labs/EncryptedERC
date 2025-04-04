@@ -1,7 +1,6 @@
 node_modules
 .env
-.DS_Store
-
+*.DS_Store
 # Hardhat files
 /cache
 /artifacts
@@ -21,3 +20,7 @@ ignition/deployments/chain-31337
 
 # hardhat-gas-report
 gas-report.txt
+
+# zkit
+generated-types/
+zkit/

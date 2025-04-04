@@ -17,3 +17,5 @@ error InvalidChainId();
 error InvalidNullifier();
 error InvalidSender();
 error InvalidRegistrationHash();
+error ZeroAddress();
+error TokenBlacklisted(address token);

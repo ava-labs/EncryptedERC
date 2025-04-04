@@ -7,7 +7,9 @@ pragma solidity 0.8.27;
 
 interface IWithdrawVerifier {
     function verifyProof(
-        uint256[8] calldata proof,
-        uint256[16] calldata input
-    ) external view;
+        uint256[2] memory pointA_,
+        uint256[2][2] memory pointB_,
+        uint256[2] memory pointC_,
+        uint256[16] memory publicSignals_
+    ) external view returns (bool verified_);
 }
