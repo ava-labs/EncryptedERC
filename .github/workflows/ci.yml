@@ -24,24 +24,12 @@ jobs:
         with:
           node-version-file: ".nvmrc"
 
-      - name: Setup Go ${{ matrix.go-version }}
-        uses: actions/setup-go@v4
-        with:
-          go-version: ${{ matrix.go-version }}
-
-      - name: "Install Golang dependencies"
-        run: "cd zk && make"
-
       - name: "Install the dependencies"
         run: "npm install"
 
       - name: Hardhat coverage
         run: |
-          touch eERC-tests.txt && \
-          npx hardhat coverage | tee eERC-tests.txt || true && \
-          echo '```' ? >> $GITHUB_STEP_SUMMARY && \
-          cat eERC-tests.txt >> $GITHUB_STEP_SUMMARY && \
-          echo '```' ? >> $GITHUB_STEP_SUMMARY
+          npx hardhat coverage
 
       - name: "Run linter"
         run: "npm run lint"

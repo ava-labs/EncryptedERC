@@ -1,8 +1,7 @@
 import { ethers } from "hardhat";
-import { deployLibrary } from "../test/helpers";
+import { deployLibrary, deployVerifiers } from "../test/helpers";
 import { EncryptedERC__factory } from "../typechain-types";
 import { DECIMALS } from "./constants";
-import { deployProductionVerifiers } from "./helpers";
 
 const main = async () => {
 	// get deployer
@@ -14,7 +13,7 @@ const main = async () => {
 		mintVerifier,
 		withdrawVerifier,
 		transferVerifier,
-	} = await deployProductionVerifiers(deployer);
+	} = await deployVerifiers(deployer);
 
 	// deploy babyjub library
 	const babyJubJub = await deployLibrary(deployer);

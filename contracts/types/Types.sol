@@ -11,8 +11,11 @@ struct Point {
 }
 
 struct CreateEncryptedERCParams {
+    // registrar contract address for fetching users public key
     address registrar;
+    // eERC is converter mode or not
     bool isConverter;
+    // eERC Token
     string name;
     string symbol;
     uint8 decimals;
@@ -44,4 +47,31 @@ struct BalanceHistory {
 struct EGCT {
     Point c1;
     Point c2;
+}
+
+/// @dev The proof base is used to verify the proof
+struct ProofPoints {
+    uint256[2] a;
+    uint256[2][2] b;
+    uint256[2] c;
+}
+
+struct RegisterProof {
+    ProofPoints proofPoints;
+    uint256[5] publicSignals;
+}
+
+struct MintProof {
+    ProofPoints proofPoints;
+    uint256[24] publicSignals;
+}
+
+struct TransferProof {
+    ProofPoints proofPoints;
+    uint256[32] publicSignals;
+}
+
+struct WithdrawProof {
+    ProofPoints proofPoints;
+    uint256[16] publicSignals;
 }

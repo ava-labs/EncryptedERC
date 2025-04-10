@@ -6,6 +6,8 @@
 		"@nomicfoundation/hardhat-chai-matchers": "^2.0.8",
 		"@nomicfoundation/hardhat-ethers": "^3.0.8",
 		"@openzeppelin/contracts": "^5.1.0",
+		"@solarity/chai-zkit": "^0.3.1",
+		"@solarity/hardhat-zkit": "^0.5.15",
 		"@typechain/hardhat": "^9.1.0",
 		"@types/jest": "^29.5.14",
 		"@types/mocha": "^10.0.10",
@@ -22,7 +24,7 @@
 	},
 	"scripts": {
 		"test": "mocha 'src/**/*.test.js'",
-		"postinstall": "cd zk && make",
+		"postinstall": "npx hardhat compile & npx hardhat zkit make --force && npx hardhat zkit verifiers",
 		"lint:sol": "solhint '**/*.sol' --config ./.solhint.json --ignore-path ./.solhintignore --max-warnings 0 && npx prettier --check '**/*.sol' --config ./.prettierrc",
 		"lint:ts": "npx biome lint .",
 		"lint": "npm run lint:sol && npm run lint:ts"

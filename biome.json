@@ -11,7 +11,8 @@
 			"typechain-types",
 			"coverage",
 			"artifacts",
-			".vscode"
+			".vscode",
+			"generated-types"
 		]
 	},
 	"formatter": {
@@ -33,4 +34,3 @@
 		}
 	}
 }
-

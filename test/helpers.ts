@@ -5,20 +5,27 @@ import util from "node:util";
 import type { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/dist/src/signer-with-address";
 import { Base8, mulPointEscalar } from "@zk-kit/baby-jubjub";
 import { expect } from "chai";
-import { formatPrivKeyForBabyJub } from "maci-crypto";
+import { ethers, zkit } from "hardhat";
+import { poseidon } from "maci-crypto/build/ts/hashing";
+import type {
+	CalldataMintCircuitGroth16,
+	CalldataTransferCircuitGroth16,
+	CalldataWithdrawCircuitGroth16,
+	MintCircuit,
+	TransferCircuit,
+	WithdrawCircuit,
+} from "../generated-types/zkit";
+import { processPoseidonDecryption, processPoseidonEncryption } from "../src";
 import { decryptPoint, encryptMessage } from "../src/jub/jub";
 import type { AmountPCTStructOutput } from "../typechain-types/contracts/EncryptedERC";
 import { BabyJubJub__factory } from "../typechain-types/factories/contracts/libraries";
 import {
-	MintVerifier__factory,
-	RegistrationVerifier__factory,
-	TransferVerifier__factory,
-	WithdrawVerifier__factory,
+	MintCircuitGroth16Verifier__factory,
+	RegistrationCircuitGroth16Verifier__factory,
+	TransferCircuitGroth16Verifier__factory,
+	WithdrawCircuitGroth16Verifier__factory,
 } from "../typechain-types/factories/contracts/verifiers";
 import type { User } from "./user";
-import { ethers } from "hardhat";
-import { poseidon } from "maci-crypto/build/ts/hashing";
-import { processPoseidonDecryption, processPoseidonEncryption } from "../src";
 
 const execAsync = util.promisify(exec);
 
@@ -31,19 +38,24 @@ const execAsync = util.promisify(exec);
  * @returns transferVerifier - Transfer verifier contract address
  */
 export const deployVerifiers = async (signer: SignerWithAddress) => {
-	const registrationVerifierFactory = new RegistrationVerifier__factory(signer);
+	const registrationVerifierFactory =
+		new RegistrationCircuitGroth16Verifier__factory(signer);
 	const registrationVerifier = await registrationVerifierFactory.deploy();
 	await registrationVerifier.waitForDeployment();
 
-	const mintVerifierFactory = new MintVerifier__factory(signer);
+	const mintVerifierFactory = new MintCircuitGroth16Verifier__factory(signer);
 	const mintVerifier = await mintVerifierFactory.deploy();
 	await mintVerifier.waitForDeployment();
 
-	const withdrawVerifierFactory = new WithdrawVerifier__factory(signer);
+	const withdrawVerifierFactory = new WithdrawCircuitGroth16Verifier__factory(
+		signer,
+	);
 	const withdrawVerifier = await withdrawVerifierFactory.deploy();
 	await withdrawVerifier.waitForDeployment();
 
-	const transferVerifierFactory = new TransferVerifier__factory(signer);
+	const transferVerifierFactory = new TransferCircuitGroth16Verifier__factory(
+		signer,
+	);
 	const transferVerifier = await transferVerifierFactory.deploy();
 	await transferVerifier.waitForDeployment();
 
@@ -69,43 +81,6 @@ export const deployLibrary = async (signer: SignerWithAddress) => {
 };
 
 /**
- *
- * @param {PROOF_TYPE} type  Proof type
- * @param {object}     input Proof Input
- * @returns Proof
- * @dev This function generates a proof for the given input and proof type.
- * 	    It uses the binary in the outputs folder.
- */
-export const generateGnarkProof = async (
-	type: string,
-	input: string,
-): Promise<string[]> => {
-	const outputPath = path.join(__dirname, `${type}.output.json`);
-
-	const pkPath = path.join(__dirname, "../", "build", `${type}.pk`);
-	const csPath = path.join(__dirname, "../", "build", `${type}.r1cs`);
-
-	const executableName = "encryptedERC";
-	const executable = path.join(__dirname, "../", "zk", "build", executableName);
-
-	const cmd = `${executable} --operation ${type} --input '${input}' --pk ${pkPath} --cs ${csPath} --output ${outputPath}`;
-
-	// todo why stdout?
-	const now = Date.now();
-	console.log("Generating proof for ", type);
-	const { stderr: err } = await execAsync(cmd);
-	console.log("Proof generation took", Date.now() - now, "ms");
-	if (err) throw new Error(err);
-
-	const output = fs.readFileSync(outputPath, "utf-8");
-	const { proof } = JSON.parse(output);
-
-	fs.unlinkSync(outputPath);
-
-	return proof;
-};
-
-/**
  * Function for minting tokens privately to another user
  * @param amount Amount to be
  * @param receiverPublicKey Receiver's public key
@@ -116,7 +91,7 @@ export const privateMint = async (
 	amount: bigint,
 	receiverPublicKey: bigint[],
 	auditorPublicKey: bigint[],
-) => {
+): Promise<CalldataMintCircuitGroth16> => {
 	// 0. get chain id
 	const network = await ethers.provider.getNetwork();
 	const chainId = network.chainId;
@@ -144,36 +119,32 @@ export const privateMint = async (
 	// 4. create nullifier hash for the auditor
 	const nullifierHash = poseidon([chainId, ...auditorCiphertext]);
 
-	const publicInputs = [
-		...receiverPublicKey.map(String),
-		...encryptedAmount[0].map(String),
-		...encryptedAmount[1].map(String),
-		...receiverCiphertext.map(String),
-		...receiverAuthKey.map(String),
-		receiverNonce.toString(),
-		...auditorPublicKey.map(String),
-		...auditorCiphertext.map(String),
-		...auditorAuthKey.map(String),
-		auditorNonce.toString(),
-		chainId.toString(),
-		nullifierHash.toString(),
-	];
-
-	const privateInputs = [
-		encryptedAmountRandom.toString(),
-		receiverEncRandom.toString(),
-		auditorEncRandom.toString(),
-		amount.toString(),
-	];
-
 	const input = {
-		privateInputs,
-		publicInputs,
+		ValueToMint: amount,
+		ChainID: chainId,
+		NullifierHash: nullifierHash,
+		ReceiverPublicKey: receiverPublicKey,
+		ReceiverVTTC1: encryptedAmount[0],
+		ReceiverVTTC2: encryptedAmount[1],
+		ReceiverVTTRandom: encryptedAmountRandom,
+		ReceiverPCT: receiverCiphertext,
+		ReceiverPCTAuthKey: receiverAuthKey,
+		ReceiverPCTNonce: receiverNonce,
+		ReceiverPCTRandom: receiverEncRandom,
+		AuditorPublicKey: auditorPublicKey,
+		AuditorPCT: auditorCiphertext,
+		AuditorPCTAuthKey: auditorAuthKey,
+		AuditorPCTNonce: auditorNonce,
+		AuditorPCTRandom: auditorEncRandom,
 	};
 
-	const proof = await generateGnarkProof("MINT", JSON.stringify(input));
+	const circuit = await zkit.getCircuit("MintCircuit");
+	const mintCircuit = circuit as unknown as MintCircuit;
 
-	return { proof, publicInputs };
+	const proof = await mintCircuit.generateProof(input);
+	const calldata = await mintCircuit.generateCalldata(proof);
+
+	return calldata;
 };
 
 /**
@@ -221,7 +192,10 @@ export const privateTransfer = async (
 	transferAmount: bigint,
 	senderEncryptedBalance: bigint[],
 	auditorPublicKey: bigint[],
-) => {
+): Promise<{
+	proof: CalldataTransferCircuitGroth16;
+	senderBalancePCT: bigint[];
+}> => {
 	const senderNewBalance = senderBalance - transferAmount;
 	// 1. encrypt the transfer amount with el-gamal for sender
 	const { cipher: encryptedAmountSender, random: encryptedAmountSenderRandom } =
@@ -256,47 +230,40 @@ export const privateTransfer = async (
 		authKey: senderAuthKey,
 	} = processPoseidonEncryption([senderNewBalance], sender.publicKey);
 
-	const publicInputs = [
-		...sender.publicKey.map(String),
-		...senderEncryptedBalance.map(String),
-		...encryptedAmountSender[0].map(String),
-		...encryptedAmountSender[1].map(String),
-		...receiverPublicKey.map(String),
-		...encryptedAmountReceiver[0].map(String),
-		...encryptedAmountReceiver[1].map(String),
-		...receiverCiphertext.map(String),
-		...receiverAuthKey.map(String),
-		receiverNonce.toString(),
-		...auditorPublicKey.map(String),
-		...auditorCiphertext.map(String),
-		...auditorAuthKey.map(String),
-		auditorNonce.toString(),
-	];
-
-	const privateInputs = [
-		formatPrivKeyForBabyJub(sender.privateKey).toString(),
-		senderBalance.toString(),
-		encryptedAmountReceiverRandom.toString(),
-		receiverEncRandom.toString(),
-		auditorEncRandom.toString(),
-		transferAmount.toString(),
-	];
+	const circuit = await zkit.getCircuit("TransferCircuit");
+	const transferCircuit = circuit as unknown as TransferCircuit;
 
 	const input = {
-		privateInputs,
-		publicInputs,
+		ValueToTransfer: transferAmount,
+		SenderPrivateKey: sender.formattedPrivateKey,
+		SenderPublicKey: sender.publicKey,
+		SenderBalance: senderBalance,
+		SenderBalanceC1: senderEncryptedBalance.slice(0, 2),
+		SenderBalanceC2: senderEncryptedBalance.slice(2, 4),
+		SenderVTTC1: encryptedAmountSender[0],
+		SenderVTTC2: encryptedAmountSender[1],
+		ReceiverPublicKey: receiverPublicKey,
+		ReceiverVTTC1: encryptedAmountReceiver[0],
+		ReceiverVTTC2: encryptedAmountReceiver[1],
+		ReceiverVTTRandom: encryptedAmountReceiverRandom,
+		ReceiverPCT: receiverCiphertext,
+		ReceiverPCTAuthKey: receiverAuthKey,
+		ReceiverPCTNonce: receiverNonce,
+		ReceiverPCTRandom: receiverEncRandom,
+
+		AuditorPublicKey: auditorPublicKey,
+		AuditorPCT: auditorCiphertext,
+		AuditorPCTAuthKey: auditorAuthKey,
+		AuditorPCTNonce: auditorNonce,
+		AuditorPCTRandom: auditorEncRandom,
 	};
 
-	const proof = await generateGnarkProof("TRANSFER", JSON.stringify(input));
+	const proof = await transferCircuit.generateProof(input);
+	const calldata = await transferCircuit.generateCalldata(proof);
 
 	return {
-		proof,
-		publicInputs,
-		senderBalancePCT: [
-			...senderCiphertext.map(String),
-			...senderAuthKey.map(String),
-			senderNonce.toString(),
-		],
+		proof: calldata,
+		senderBalancePCT: [...senderCiphertext, ...senderAuthKey, senderNonce],
 	};
 };
 
@@ -335,7 +302,7 @@ export const decryptPCT = async (
  * @param userEncryptedBalance User encrypted balance from eERC contract
  * @param userBalance User plain balance
  * @param auditorPublicKey Auditor's public key
- * @returns proof, publicInputs - Proof and public inputs for the generated proof
+ * @returns proof - Proof and public inputs for the generated proof
  * @returns userBalancePCT - User's balance after the withdrawal encrypted with Poseidon encryption
  */
 export const withdraw = async (
@@ -344,7 +311,10 @@ export const withdraw = async (
 	userEncryptedBalance: bigint[],
 	userBalance: bigint,
 	auditorPublicKey: bigint[],
-) => {
+): Promise<{
+	proof: CalldataWithdrawCircuitGroth16;
+	userBalancePCT: bigint[];
+}> => {
 	const newBalance = userBalance - amount;
 	const userPublicKey = user.publicKey;
 
@@ -363,38 +333,29 @@ export const withdraw = async (
 		authKey: auditorAuthKey,
 	} = processPoseidonEncryption([amount], auditorPublicKey);
 
-	const publicInputs = [
-		...userPublicKey.map(String),
-		...userEncryptedBalance.map(String),
-		...auditorPublicKey.map(String),
-		...auditorCiphertext.map(String),
-		...auditorAuthKey.map(String),
-		auditorNonce.toString(),
-		amount.toString(),
-	];
-
-	const privateInputs = [
-		formatPrivKeyForBabyJub(user.privateKey).toString(),
-		userBalance.toString(),
-		auditorEncRandom.toString(),
-	];
-
 	const input = {
-		privateInputs,
-		publicInputs,
+		ValueToWithdraw: amount,
+		SenderPrivateKey: user.formattedPrivateKey,
+		SenderPublicKey: userPublicKey,
+		SenderBalance: userBalance,
+		SenderBalanceC1: userEncryptedBalance.slice(0, 2),
+		SenderBalanceC2: userEncryptedBalance.slice(2, 4),
+		AuditorPublicKey: auditorPublicKey,
+		AuditorPCT: auditorCiphertext,
+		AuditorPCTAuthKey: auditorAuthKey,
+		AuditorPCTNonce: auditorNonce,
+		AuditorPCTRandom: auditorEncRandom,
 	};
 
-	// generate proof
-	const proof = await generateGnarkProof("WITHDRAW", JSON.stringify(input));
+	const circuit = await zkit.getCircuit("WithdrawCircuit");
+	const withdrawCircuit = circuit as unknown as WithdrawCircuit;
+
+	const proof = await withdrawCircuit.generateProof(input);
+	const calldata = await withdrawCircuit.generateCalldata(proof);
 
 	return {
-		proof,
-		publicInputs,
-		userBalancePCT: [
-			...userCiphertext.map(String),
-			...userAuthKey.map(String),
-			userNonce.toString(),
-		],
+		proof: calldata,
+		userBalancePCT: [...userCiphertext, ...userAuthKey, userNonce],
 	};
 };
 
