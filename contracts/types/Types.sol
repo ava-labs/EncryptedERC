@@ -75,3 +75,10 @@ struct WithdrawProof {
     ProofPoints proofPoints;
     uint256[16] publicSignals;
 }
+
+struct Metadata {
+    address messageFrom;
+    address messageTo;
+    string messageType;
+    bytes encryptedMsg;
+}

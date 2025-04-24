@@ -15,21 +15,23 @@ AvaCloud API documentation can be found [here](https://docs.avacloud.io/encrypte
 
 ## Key features
 
-- **Confidential Transactions**: User balances and transaction amounts remain completely hidden, ensuring financial privacy.
+- **Confidential Transactions**: User balances and transaction amounts remain completely hidden, ensuring financial confidentiality.
 
-- **Large Integers**: Efficiently handles large token amounts up to 128 bits (2^128), accommodating substantial financial transactions.
+- **Large Integers**: Efficiently handles large token amounts up to 252 bits (2^252), enabling flexible transactions.
 
 - **Client-Side Operations**: Users retain control, performing encryption, decryption, and zk-proof generation directly on their own devices.
 
 - **Fully On-chain Nature**: Operates entirely on-chain without the need for relayers or off-chain actors.
 
-- **Built-in Compliance**: Supports external auditors, ensuring regulatory compliance.
+- **Built-in Compliance**: Supports external and rotatable auditors, ensuring regulatory compliance.
 
-- **Dual-Mode Operation**: Supports both standalone tokens and conversion of existing ERC-20 tokens.
+- **Dual-Mode Operation**: Supports both creating new private tokens and converting existing ERC-20 tokens their private versions.
 
-- **Zero-Knowledge Proofs**: Uses zk-SNARKs to validate transactions without revealing sensitive information.
+- **Zero-Knowledge Proofs**: Uses efficient zk-SNARKs to validate statements without revealing sensitive information.
 
-- **Chain Agnostic**: Can be deployed on any EVM-compatible blockchains.
+- **Chain Agnostic**: Can be deployed on any EVM-compatible blockchain.
+
+- **(NEW) Encrypted Metadata**: Allows users to send arbitrary-length encrypted metadata along with transactions.
 
 ## Architecture
 
@@ -82,14 +84,13 @@ The eERC protocol consists of several key components:
 
 1. **Standalone Mode**:
 
-   - Creates entirely new private ERC-20 tokens
-   - Built-in privacy features
-   - Direct token operations
+   - Creates entirely new private ERC-20 (eERC) tokens
+   - Relies on minting and burning to manage token supply
+   - Keeps total supply private all the time, offering better privacy compared to converter mode
 
 2. **Converter Mode**:
-   - Adds privacy features to existing ERC-20 tokens
-   - Wraps existing ERC20 tokens
-   - Enables privacy through deposit/withdraw
+   - Wraps existing ERC20 tokens to eERC tokens
+   - Relies on deposits and withdrawals to manage token supply
    - Maintains compatibility with original tokens
 
 ## File structure
