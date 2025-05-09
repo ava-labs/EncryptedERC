@@ -1,12 +1,6 @@
 import type { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/dist/src/signer-with-address";
 import { expect } from "chai";
 import { ethers, zkit } from "hardhat";
-import type { Registrar } from "../typechain-types/contracts/Registrar";
-import {
-	EncryptedERC__factory,
-	Registrar__factory,
-} from "../typechain-types/factories/contracts";
-
 import type {
 	CalldataWithdrawCircuitGroth16,
 	RegistrationCircuit,
@@ -19,10 +13,15 @@ import {
 	SimpleERC20__factory,
 } from "../typechain-types";
 import type {
+	BurnProofStruct,
 	EncryptedERC,
 	MintProofStruct,
-	TransferProofStruct,
 } from "../typechain-types/contracts/EncryptedERC";
+import type { Registrar } from "../typechain-types/contracts/Registrar";
+import {
+	EncryptedERC__factory,
+	Registrar__factory,
+} from "../typechain-types/factories/contracts";
 import {
 	deployLibrary,
 	deployVerifiers,
@@ -53,6 +52,7 @@ describe("EncryptedERC - Converter", () => {
 			mintVerifier,
 			withdrawVerifier,
 			transferVerifier,
+			burnVerifier,
 		} = await deployVerifiers(owner);
 		const babyJubJub = await deployLibrary(owner);
 
@@ -101,6 +101,7 @@ describe("EncryptedERC - Converter", () => {
 			mintVerifier,
 			withdrawVerifier,
 			transferVerifier,
+			burnVerifier,
 			decimals: DECIMALS,
 		});
 
@@ -117,12 +118,6 @@ describe("EncryptedERC - Converter", () => {
 		it("should deploy registrar properly", async () => {
 			expect(registrar.target).to.not.be.null;
 			expect(registrar).to.not.be.null;
-		});
-
-		it("should initialize properly", async () => {
-			const burnUserAddress = await registrar.burnUser();
-			const burnUserPublicKey = await registrar.userPublicKeys(burnUserAddress);
-			expect(burnUserPublicKey).to.deep.equal([0n, 1n]);
 		});
 
 		describe("Registration", () => {
@@ -188,7 +183,7 @@ describe("EncryptedERC - Converter", () => {
 			publicSignals: Array.from({ length: 24 }, () => 1n),
 		};
 
-		const mockTransferProof = {
+		const mockBurnProof = {
 			proofPoints: {
 				a: ["0x0", "0x0"],
 				b: [
@@ -197,7 +192,7 @@ describe("EncryptedERC - Converter", () => {
 				],
 				c: ["0x0", "0x0"],
 			},
-			publicSignals: Array.from({ length: 32 }, () => 1n),
+			publicSignals: Array.from({ length: 19 }, () => 1n),
 		};
 
 		it("should initialize properly", async () => {
@@ -216,7 +211,7 @@ describe("EncryptedERC - Converter", () => {
 			it("should revert if user try to call private burn without auditor key", async () => {
 				await expect(
 					encryptedERC.connect(users[0].signer).privateBurn(
-						mockTransferProof as TransferProofStruct,
+						mockBurnProof as BurnProofStruct,
 						Array.from({ length: 7 }, () => 1n),
 					),
 				).to.be.reverted;
@@ -248,7 +243,7 @@ describe("EncryptedERC - Converter", () => {
 			it("should revert if user try to call private burn in converter mode", async () => {
 				await expect(
 					encryptedERC.connect(users[0].signer).privateBurn(
-						mockTransferProof as TransferProofStruct,
+						mockBurnProof as BurnProofStruct,
 						Array.from({ length: 7 }, () => 1n),
 					),
 				).to.be.revertedWithCustomError(encryptedERC, "InvalidOperation");

@@ -6,6 +6,7 @@
 pragma solidity 0.8.27;
 
 import {EncryptedBalance, EGCT, BalanceHistory, AmountPCT} from "./types/Types.sol";
+import {InvalidProof} from "./errors/Errors.sol";
 import {BabyJubJub} from "./libraries/BabyJubJub.sol";
 
 /**
@@ -286,6 +287,34 @@ contract EncryptedUserBalances {
             balances[user][tokenId].balanceList[hashWithNonce].isValid,
             balances[user][tokenId].balanceList[hashWithNonce].index
         );
+    }
+
+    /**
+     * @notice Verifies a user's balance
+     * @param user The address of the user
+     * @param tokenId The ID of the token
+     * @param eGCT The ElGamal ciphertext representing the balance
+     * @return transactionIndex The transaction index associated with the balance
+     * @dev If balance is not valid, it reverts with InvalidProof error
+     */
+    function _verifyUserBalance(
+        address user,
+        uint256 tokenId,
+        EGCT memory eGCT
+    ) internal view returns (uint256) {
+        // hash the encrypted balance
+        uint256 balanceHash = _hashEGCT(eGCT);
+
+        (bool isValid, uint256 transactionIndex) = _isBalanceValid(
+            user,
+            tokenId,
+            balanceHash
+        );
+        if (!isValid) {
+            revert InvalidProof();
+        }
+
+        return transactionIndex;
     }
 
     /**

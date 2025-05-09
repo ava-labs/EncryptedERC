@@ -14,7 +14,7 @@ import {BabyJubJub} from "./libraries/BabyJubJub.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 // types
-import {CreateEncryptedERCParams, Point, EGCT, EncryptedBalance, AmountPCT, MintProof, TransferProof, WithdrawProof} from "./types/Types.sol";
+import {CreateEncryptedERCParams, Point, EGCT, EncryptedBalance, AmountPCT, MintProof, TransferProof, WithdrawProof, BurnProof, TransferInputs} from "./types/Types.sol";
 
 // errors
 import {UserNotRegistered, InvalidProof, TransferFailed, UnknownToken, InvalidChainId, InvalidNullifier, ZeroAddress} from "./errors/Errors.sol";
@@ -24,6 +24,7 @@ import {IRegistrar} from "./interfaces/IRegistrar.sol";
 import {IMintVerifier} from "./interfaces/verifiers/IMintVerifier.sol";
 import {IWithdrawVerifier} from "./interfaces/verifiers/IWithdrawVerifier.sol";
 import {ITransferVerifier} from "./interfaces/verifiers/ITransferVerifier.sol";
+import {IBurnVerifier} from "./interfaces/verifiers/IBurnVerifier.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 
@@ -65,6 +66,7 @@ contract EncryptedERC is TokenTracker, EncryptedUserBalances, AuditorManager {
     IMintVerifier public mintVerifier;
     IWithdrawVerifier public withdrawVerifier;
     ITransferVerifier public transferVerifier;
+    IBurnVerifier public burnVerifier;
 
     /// @notice Token metadata
     string public name;
@@ -152,6 +154,17 @@ contract EncryptedERC is TokenTracker, EncryptedUserBalances, AuditorManager {
     );
 
     ///////////////////////////////////////////////////
+    ///                   Modifiers                 ///
+    ///////////////////////////////////////////////////
+    modifier onlyIfUserRegistered(address user) {
+        bool isRegistered = registrar.isUserRegistered(user);
+        if (!isRegistered) {
+            revert UserNotRegistered();
+        }
+        _;
+    }
+
+    ///////////////////////////////////////////////////
     ///                   Constructor               ///
     ///////////////////////////////////////////////////
 
@@ -169,7 +182,8 @@ contract EncryptedERC is TokenTracker, EncryptedUserBalances, AuditorManager {
             params.registrar == address(0) ||
             params.mintVerifier == address(0) ||
             params.withdrawVerifier == address(0) ||
-            params.transferVerifier == address(0)
+            params.transferVerifier == address(0) ||
+            params.burnVerifier == address(0)
         ) {
             revert ZeroAddress();
         }
@@ -179,6 +193,7 @@ contract EncryptedERC is TokenTracker, EncryptedUserBalances, AuditorManager {
         mintVerifier = IMintVerifier(params.mintVerifier);
         withdrawVerifier = IWithdrawVerifier(params.withdrawVerifier);
         transferVerifier = ITransferVerifier(params.transferVerifier);
+        burnVerifier = IBurnVerifier(params.burnVerifier);
 
         // if contract is not a converter, then set the name and symbol
         if (!params.isConverter) {
@@ -205,11 +220,9 @@ contract EncryptedERC is TokenTracker, EncryptedUserBalances, AuditorManager {
      * - Caller must be the contract owner
      * - User must be registered
      */
-    function setAuditorPublicKey(address user) external onlyOwner {
-        if (!registrar.isUserRegistered(user)) {
-            revert UserNotRegistered();
-        }
-
+    function setAuditorPublicKey(
+        address user
+    ) external onlyOwner onlyIfUserRegistered(user) {
         uint256[2] memory publicKey_ = registrar.getUserPublicKey(user);
         _updateAuditor(user, publicKey_);
     }
@@ -236,7 +249,13 @@ contract EncryptedERC is TokenTracker, EncryptedUserBalances, AuditorManager {
     function privateMint(
         address user,
         MintProof calldata proof
-    ) external onlyOwner onlyIfAuditorSet onlyForStandalone {
+    )
+        external
+        onlyOwner
+        onlyIfAuditorSet
+        onlyForStandalone
+        onlyIfUserRegistered(user)
+    {
         uint256[24] memory publicInputs = proof.publicSignals;
 
         // Validate chain ID
@@ -244,31 +263,9 @@ contract EncryptedERC is TokenTracker, EncryptedUserBalances, AuditorManager {
             revert InvalidChainId();
         }
 
-        // Validate user registration
-        if (!registrar.isUserRegistered(user)) {
-            revert UserNotRegistered();
-        }
-
-        // Validate user public key
-        {
-            uint256[2] memory userPublicKey = registrar.getUserPublicKey(user);
-            if (
-                userPublicKey[0] != publicInputs[2] ||
-                userPublicKey[1] != publicInputs[3]
-            ) {
-                revert InvalidProof();
-            }
-        }
-
-        // Validate auditor public key
-        {
-            if (
-                auditorPublicKey.x != publicInputs[15] ||
-                auditorPublicKey.y != publicInputs[16]
-            ) {
-                revert InvalidProof();
-            }
-        }
+        // validate public keys
+        _validatePublicKey(user, [publicInputs[2], publicInputs[3]]);
+        _validateAuditorPublicKey([publicInputs[15], publicInputs[16]]);
 
         // Validate and check mint nullifier
         uint256 mintNullifier = publicInputs[1];
@@ -290,8 +287,32 @@ contract EncryptedERC is TokenTracker, EncryptedUserBalances, AuditorManager {
             revert InvalidProof();
         }
 
-        // Perform the private mint operation
-        _privateMint(user, mintNullifier, publicInputs);
+        {
+            // Extract the encrypted amount from the proof
+            EGCT memory encryptedAmount = EGCT({
+                c1: Point({x: publicInputs[4], y: publicInputs[5]}),
+                c2: Point({x: publicInputs[6], y: publicInputs[7]})
+            });
+
+            // Extract amount PCT
+            uint256[7] memory amountPCT;
+            for (uint256 i = 0; i < 7; i++) {
+                amountPCT[i] = publicInputs[8 + i];
+            }
+
+            // Perform the private mint operation
+            _privateMint(user, encryptedAmount, amountPCT);
+        }
+
+        // mark the mint nullifier as used
+        alreadyMinted[mintNullifier] = true;
+
+        uint256[7] memory auditorPCT;
+        for (uint256 i = 0; i < auditorPCT.length; i++) {
+            auditorPCT[i] = publicInputs[17 + i];
+        }
+
+        emit PrivateMint(user, auditorPCT, auditor);
     }
 
     /**
@@ -313,49 +334,25 @@ contract EncryptedERC is TokenTracker, EncryptedUserBalances, AuditorManager {
      * - Proof must be valid
      */
     function privateBurn(
-        TransferProof memory proof,
+        BurnProof calldata proof,
         uint256[7] calldata balancePCT
-    ) external onlyIfAuditorSet onlyForStandalone {
-        uint256[32] memory publicInputs = proof.publicSignals;
-
-        address to = registrar.burnUser();
+    )
+        external
+        onlyIfAuditorSet
+        onlyForStandalone
+        onlyIfUserRegistered(msg.sender)
+    {
+        uint256[19] calldata publicInputs = proof.publicSignals;
         address from = msg.sender;
-        uint256 tokenId = 0; // since burn is only stand-alone eERC
 
-        // Validate sender registration
-        {
-            if (!registrar.isUserRegistered(from)) {
-                revert UserNotRegistered();
-            }
-        }
+        // validate public key
+        _validatePublicKey(from, [publicInputs[0], publicInputs[1]]);
 
-        // Validate public keys
-        {
-            uint256[2] memory fromPublicKey = registrar.getUserPublicKey(from);
-            uint256[2] memory burnPublicKey = [uint256(0), uint256(1)];
-
-            if (
-                fromPublicKey[0] != publicInputs[0] ||
-                fromPublicKey[1] != publicInputs[1] ||
-                burnPublicKey[0] != publicInputs[10] ||
-                burnPublicKey[1] != publicInputs[11]
-            ) {
-                revert InvalidProof();
-            }
-        }
-
-        // Validate auditor public key
-        {
-            if (
-                auditorPublicKey.x != publicInputs[23] ||
-                auditorPublicKey.y != publicInputs[24]
-            ) {
-                revert InvalidProof();
-            }
-        }
+        // validate auditor public key
+        _validateAuditorPublicKey([publicInputs[10], publicInputs[11]]);
 
         // Verify the zero-knowledge proof
-        bool isVerified = transferVerifier.verifyProof(
+        bool isVerified = burnVerifier.verifyProof(
             proof.proofPoints.a,
             proof.proofPoints.b,
             proof.proofPoints.c,
@@ -365,18 +362,28 @@ contract EncryptedERC is TokenTracker, EncryptedUserBalances, AuditorManager {
             revert InvalidProof();
         }
 
-        // Perform the transfer to burn address
-        _transfer(from, to, tokenId, publicInputs, balancePCT);
+        // provided encrypted balance
+        EGCT memory providedBalance = EGCT({
+            c1: Point({x: publicInputs[2], y: publicInputs[3]}),
+            c2: Point({x: publicInputs[4], y: publicInputs[5]})
+        });
 
-        // Extract auditor PCT and emit event
-        {
-            uint256[7] memory auditorPCT;
-            for (uint256 i = 0; i < 7; i++) {
-                auditorPCT[i] = publicInputs[25 + i];
-            }
+        // extract encrypted burn amount
+        EGCT memory encryptedBurnAmount = EGCT({
+            c1: Point({x: publicInputs[6], y: publicInputs[7]}),
+            c2: Point({x: publicInputs[8], y: publicInputs[9]})
+        });
 
-            emit PrivateBurn(from, auditorPCT, auditor);
+        // perform the burn (since burn is only for Standalone, always passing tokenId as 0)
+        _privateBurn(from, 0, providedBalance, encryptedBurnAmount, balancePCT);
+
+        // extract auditor PCT
+        uint256[7] memory auditorPCT;
+        for (uint256 i = 0; i < auditorPCT.length; i++) {
+            auditorPCT[i] = publicInputs[12 + i];
         }
+
+        emit PrivateBurn(from, auditorPCT, auditor);
     }
 
     /**
@@ -402,44 +409,19 @@ contract EncryptedERC is TokenTracker, EncryptedUserBalances, AuditorManager {
         uint256 tokenId,
         TransferProof memory proof,
         uint256[7] calldata balancePCT
-    ) public onlyIfAuditorSet {
+    )
+        public
+        onlyIfAuditorSet
+        onlyIfUserRegistered(msg.sender)
+        onlyIfUserRegistered(to)
+    {
         uint256[32] memory publicInputs = proof.publicSignals;
-        address from = msg.sender;
 
-        // Validate user registrations
-        {
-            if (
-                !registrar.isUserRegistered(from) ||
-                !registrar.isUserRegistered(to)
-            ) {
-                revert UserNotRegistered();
-            }
-        }
+        // validate user's public key
+        _validatePublicKey(msg.sender, [publicInputs[0], publicInputs[1]]);
+        _validatePublicKey(to, [publicInputs[10], publicInputs[11]]);
 
-        // Validate public keys
-        {
-            uint256[2] memory fromPublicKey = registrar.getUserPublicKey(from);
-            uint256[2] memory toPublicKey = registrar.getUserPublicKey(to);
-
-            if (
-                fromPublicKey[0] != publicInputs[0] ||
-                fromPublicKey[1] != publicInputs[1] ||
-                toPublicKey[0] != publicInputs[10] ||
-                toPublicKey[1] != publicInputs[11]
-            ) {
-                revert InvalidProof();
-            }
-        }
-
-        // Validate auditor public key
-        {
-            if (
-                auditorPublicKey.x != publicInputs[23] ||
-                auditorPublicKey.y != publicInputs[24]
-            ) {
-                revert InvalidProof();
-            }
-        }
+        _validateAuditorPublicKey([publicInputs[23], publicInputs[24]]);
 
         // Verify the zero-knowledge proof
         bool isVerified = transferVerifier.verifyProof(
@@ -452,8 +434,22 @@ contract EncryptedERC is TokenTracker, EncryptedUserBalances, AuditorManager {
             revert InvalidProof();
         }
 
+        // Extract the inputs for the transfer operation
+        TransferInputs memory transferInputs = _extractTransferInputs(
+            publicInputs
+        );
+
         // Perform the transfer
-        _transfer(from, to, tokenId, publicInputs, balancePCT);
+        _transfer({
+            from: msg.sender,
+            to: to,
+            tokenId: tokenId,
+            providedBalance: transferInputs.providedBalance,
+            senderEncryptedAmount: transferInputs.senderEncryptedAmount,
+            receiverEncryptedAmount: transferInputs.receiverEncryptedAmount,
+            balancePCT: balancePCT,
+            amountPCT: transferInputs.amountPCT
+        });
 
         // Extract auditor PCT and emit event
         {
@@ -462,7 +458,7 @@ contract EncryptedERC is TokenTracker, EncryptedUserBalances, AuditorManager {
                 auditorPCT[i] = publicInputs[25 + i];
             }
 
-            emit PrivateTransfer(from, to, auditorPCT, auditor);
+            emit PrivateTransfer(msg.sender, to, auditorPCT, auditor);
         }
     }
 
@@ -493,16 +489,12 @@ contract EncryptedERC is TokenTracker, EncryptedUserBalances, AuditorManager {
         onlyIfAuditorSet
         onlyForConverter
         revertIfBlacklisted(tokenAddress)
+        onlyIfUserRegistered(msg.sender)
     {
         IERC20 token = IERC20(tokenAddress);
         uint256 dust;
         uint256 tokenId;
         address to = msg.sender;
-
-        // Validate user registration
-        if (!registrar.isUserRegistered(to)) {
-            revert UserNotRegistered();
-        }
 
         // Get the contract's balance before the transfer
         uint256 balanceBefore = token.balanceOf(address(this));
@@ -552,31 +544,19 @@ contract EncryptedERC is TokenTracker, EncryptedUserBalances, AuditorManager {
         uint256 tokenId,
         WithdrawProof memory proof,
         uint256[7] memory balancePCT
-    ) public onlyIfAuditorSet onlyForConverter {
+    )
+        public
+        onlyIfAuditorSet
+        onlyForConverter
+        onlyIfUserRegistered(msg.sender)
+    {
         address from = msg.sender;
         uint256[16] memory publicInputs = proof.publicSignals;
         uint256 amount = publicInputs[0];
 
-        // Validate user public key
-        {
-            uint256[2] memory publicKey = registrar.getUserPublicKey(from);
-            if (
-                publicKey[0] != publicInputs[1] ||
-                publicKey[1] != publicInputs[2]
-            ) {
-                revert InvalidProof();
-            }
-        }
-
-        // Validate auditor public key
-        {
-            if (
-                auditorPublicKey.x != publicInputs[7] ||
-                auditorPublicKey.y != publicInputs[8]
-            ) {
-                revert InvalidProof();
-            }
-        }
+        // validate public keys
+        _validatePublicKey(from, [publicInputs[1], publicInputs[2]]);
+        _validateAuditorPublicKey([publicInputs[7], publicInputs[8]]);
 
         // Verify the zero-knowledge proof
         bool isVerified = withdrawVerifier.verifyProof(
@@ -656,13 +636,11 @@ contract EncryptedERC is TokenTracker, EncryptedUserBalances, AuditorManager {
         uint256[16] memory publicInputs,
         uint256[7] memory balancePCT
     ) internal {
-        // Get token address and validate it exists
         address tokenAddress = tokenAddresses[tokenId];
         if (tokenAddress == address(0)) {
             revert UnknownToken();
         }
 
-        // Validate and process the withdrawal
         {
             // Extract the provided balance from the proof
             EGCT memory providedBalance = EGCT({
@@ -670,31 +648,18 @@ contract EncryptedERC is TokenTracker, EncryptedUserBalances, AuditorManager {
                 c2: Point({x: publicInputs[5], y: publicInputs[6]})
             });
 
-            // Verify the balance is valid
-            uint256 balanceHash = _hashEGCT(providedBalance);
-            (bool isValid, uint256 transactionIndex) = _isBalanceValid(
-                from,
-                tokenId,
-                balanceHash
-            );
-
-            if (!isValid) {
-                revert InvalidProof();
-            }
-
             // Encrypt the withdrawn amount
             EGCT memory encryptedWithdrawnAmount = BabyJubJub.encrypt(
                 Point({x: publicInputs[1], y: publicInputs[2]}),
                 amount
             );
 
-            // Subtract the amount from the user's balance
-            _subtractFromUserBalance(
+            _privateBurn(
                 from,
                 tokenId,
+                providedBalance,
                 encryptedWithdrawnAmount,
-                balancePCT,
-                transactionIndex
+                balancePCT
             );
         }
 
@@ -825,53 +790,31 @@ contract EncryptedERC is TokenTracker, EncryptedUserBalances, AuditorManager {
     /**
      * @notice Performs the internal logic for a private mint
      * @param user Address of the user to mint tokens to
-     * @param mintNullifier The mint nullifier to prevent double-minting
-     * @param input Public inputs from the proof
+     * @param encryptedAmount The encrypted amount to mint
+     * @param amountPCT The amount PCT for the mint
      * @dev This function:
-     *      1. Extracts the encrypted amount from the proof
-     *      2. Adds the encrypted amount to the user's balance
-     *      3. Marks the mint nullifier as used
-     *      4. Emits a PrivateMint event
+     *      1. Adds the encrypted amount to the user's balance
+     *      2. Emits a PrivateMint event
      */
     function _privateMint(
         address user,
-        uint256 mintNullifier,
-        uint256[24] memory input
+        EGCT memory encryptedAmount,
+        uint256[7] memory amountPCT
     ) internal {
-        // Extract the encrypted amount from the proof
-        EGCT memory eGCT = EGCT({
-            c1: Point({x: input[4], y: input[5]}),
-            c2: Point({x: input[6], y: input[7]})
-        });
-
-        // Since private mint is only for the standalone ERC, tokenId is always 0
-        uint256 tokenId = 0;
-
-        // Extract amount PCT and auditor PCT
-        uint256[7] memory amountPCT;
-        uint256[7] memory auditorPCT;
-        for (uint256 i = 0; i < 7; i++) {
-            amountPCT[i] = input[8 + i];
-            auditorPCT[i] = input[17 + i];
-        }
-
-        // Add to the user's balance
-        _addToUserBalance(user, tokenId, eGCT, amountPCT);
-
-        // Mark the mint nullifier as used
-        alreadyMinted[mintNullifier] = true;
-
-        // Emit the event
-        emit PrivateMint(user, auditorPCT, auditor);
+        // since private mint is only for the standalone ERC, tokenId is always 0
+        _addToUserBalance(user, 0, encryptedAmount, amountPCT);
     }
 
     /**
      * @notice Performs the internal logic for a private transfer
-     * @param from Address of the sender
-     * @param to Address of the receiver
-     * @param tokenId ID of the token to transfer
-     * @param input Public inputs from the proof
-     * @param balancePCT The balance PCT for the sender after the transfer
+     * @param from address The address of the sender
+     * @param to address The address of the receiver
+     * @param tokenId uint256 The ID of the token to transfer
+     * @param providedBalance EGCT The provided balance from the proof
+     * @param senderEncryptedAmount EGCT The encrypted amount to subtract from the sender's balance
+     * @param receiverEncryptedAmount EGCT The encrypted amount to add to the receiver's balance
+     * @param balancePCT uint256[7] The balance PCT for the sender after the transfer
+     * @param amountPCT uint256[7] The amount PCT for the transfer
      * @dev This function:
      *      1. Verifies the sender's balance is valid
      *      2. Subtracts the encrypted amount from the sender's balance
@@ -881,60 +824,130 @@ contract EncryptedERC is TokenTracker, EncryptedUserBalances, AuditorManager {
         address from,
         address to,
         uint256 tokenId,
-        uint256[32] memory input,
-        uint256[7] calldata balancePCT
+        EGCT memory providedBalance,
+        EGCT memory senderEncryptedAmount,
+        EGCT memory receiverEncryptedAmount,
+        uint256[7] memory balancePCT,
+        uint256[7] memory amountPCT
     ) internal {
-        // Process the sender's balance
         {
-            // Extract the provided balance from the proof
-            EGCT memory providedBalance = EGCT({
-                c1: Point({x: input[2], y: input[3]}),
-                c2: Point({x: input[4], y: input[5]})
-            });
-
-            // Verify the balance is valid
-            uint256 balanceHash = _hashEGCT(providedBalance);
-            (bool isValid, uint256 transactionIndex) = _isBalanceValid(
+            // 1. for sender operation is very similar to the private burn
+            _privateBurn(
                 from,
                 tokenId,
-                balanceHash
-            );
-            if (!isValid) {
-                revert InvalidProof();
-            }
-
-            // Extract the encrypted amount to subtract
-            EGCT memory fromEncryptedAmount = EGCT({
-                c1: Point({x: input[6], y: input[7]}),
-                c2: Point({x: input[8], y: input[9]})
-            });
-
-            // Subtract from the sender's balance
-            _subtractFromUserBalance(
-                from,
-                tokenId,
-                fromEncryptedAmount,
-                balancePCT,
-                transactionIndex
+                providedBalance,
+                senderEncryptedAmount,
+                balancePCT
             );
         }
 
-        // Process the receiver's balance
         {
-            // Extract the encrypted amount to add
-            EGCT memory toEncryptedAmount = EGCT({
-                c1: Point({x: input[12], y: input[13]}),
-                c2: Point({x: input[14], y: input[15]})
-            });
+            // 2. for receiver operation is very similar to the private mint
+            _addToUserBalance(to, tokenId, receiverEncryptedAmount, amountPCT);
+        }
+    }
 
-            // Extract amount PCT
-            uint256[7] memory amountPCT;
-            for (uint256 i = 0; i < 7; i++) {
-                amountPCT[i] = input[16 + i];
-            }
+    /**
+     * @notice Performs the internal logic for a private burn
+     * @param from Address of the user to burn tokens from
+     * @param tokenId ID of the token to burn
+     * @param providedBalance The provided balance from the proof
+     * @param encryptedAmount The encrypted amount to subtract
+     * @param balancePCT The balance PCT for the user after the burn
+     * @dev This function:
+     *      1. Verifies the user's balance is valid
+     *      2. Subtracts the encrypted amount from the user's balance
+     */
+    function _privateBurn(
+        address from,
+        uint256 tokenId,
+        EGCT memory providedBalance,
+        EGCT memory encryptedAmount,
+        uint256[7] memory balancePCT
+    ) internal {
+        // verify user encrypted balance
+        uint256 transactionIndex = _verifyUserBalance(
+            from,
+            tokenId,
+            providedBalance
+        );
 
-            // Add to the receiver's balance
-            _addToUserBalance(to, tokenId, toEncryptedAmount, amountPCT);
+        // subtract from user's balance
+        _subtractFromUserBalance(
+            from,
+            tokenId,
+            encryptedAmount,
+            balancePCT,
+            transactionIndex
+        );
+    }
+
+    /**
+     * @notice Validates a user's public key
+     * @param user The address of the user
+     * @param providedPublicKey The public key to validate
+     * @dev Function fetches the user's public key from the registrar contract
+     * @dev If the public key is not valid, it reverts with InvalidProof error
+     */
+    function _validatePublicKey(
+        address user,
+        uint256[2] memory providedPublicKey
+    ) internal view {
+        uint256[2] memory userPublicKey = registrar.getUserPublicKey(user);
+
+        if (
+            userPublicKey[0] != providedPublicKey[0] ||
+            userPublicKey[1] != providedPublicKey[1]
+        ) {
+            revert InvalidProof();
+        }
+    }
+
+    /**
+     * @notice Validates the auditor's public key
+     * @param providedPublicKey The public key to validate
+     * @dev If the public key is not match with the auditor's public key, it reverts with InvalidProof error
+     */
+    function _validateAuditorPublicKey(
+        uint256[2] memory providedPublicKey
+    ) internal view {
+        if (
+            auditorPublicKey.x != providedPublicKey[0] ||
+            auditorPublicKey.y != providedPublicKey[1]
+        ) {
+            revert InvalidProof();
+        }
+    }
+
+    /**
+     * @notice Extracts the inputs for a transfer operation
+     * @param input The input array containing the transfer data
+     * @return transferInputs TransferInputs struct containing:
+     *         - providedBalance (EGCT): The provided balance from the proof
+     *         - senderEncryptedAmount (EGCT): The encrypted amount to subtract from sender
+     *         - receiverEncryptedAmount (EGCT): The encrypted amount to add to receiver
+     *         - amountPCT (uint256[7]): The amount PCT for the transfer
+     */
+    function _extractTransferInputs(
+        uint256[32] memory input
+    ) internal pure returns (TransferInputs memory transferInputs) {
+        transferInputs.providedBalance = EGCT({
+            c1: Point({x: input[2], y: input[3]}),
+            c2: Point({x: input[4], y: input[5]})
+        });
+
+        transferInputs.senderEncryptedAmount = EGCT({
+            c1: Point({x: input[6], y: input[7]}),
+            c2: Point({x: input[8], y: input[9]})
+        });
+
+        transferInputs.receiverEncryptedAmount = EGCT({
+            c1: Point({x: input[12], y: input[13]}),
+            c2: Point({x: input[14], y: input[15]})
+        });
+
+        for (uint256 i = 0; i < 7; i++) {
+            transferInputs.amountPCT[i] = input[16 + i];
         }
     }
 }

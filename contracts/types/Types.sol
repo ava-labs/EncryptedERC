@@ -23,6 +23,7 @@ struct CreateEncryptedERCParams {
     address mintVerifier;
     address withdrawVerifier;
     address transferVerifier;
+    address burnVerifier;
 }
 
 struct AmountPCT {
@@ -71,7 +72,19 @@ struct TransferProof {
     uint256[32] publicSignals;
 }
 
+struct BurnProof {
+    ProofPoints proofPoints;
+    uint256[19] publicSignals;
+}
+
 struct WithdrawProof {
     ProofPoints proofPoints;
     uint256[16] publicSignals;
+}
+
+struct TransferInputs {
+    EGCT providedBalance;
+    EGCT senderEncryptedAmount;
+    EGCT receiverEncryptedAmount;
+    uint256[7] amountPCT;
 }

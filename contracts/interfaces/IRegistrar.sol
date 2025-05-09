@@ -21,10 +21,4 @@ interface IRegistrar {
      * @return isRegistered True if the user is registered, false otherwise.
      */
     function isUserRegistered(address user) external view returns (bool);
-
-    /**
-     * @dev Returns the burn user address.
-     * @return burnUser The burn user address.
-     */
-    function burnUser() external view returns (address);
 }

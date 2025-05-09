@@ -187,6 +187,11 @@ template CheckPublicKey() {
     signal input privKey;
     signal input pubKey[2];
 
+    // Verify the private key is not zero
+    component checkIsZero = IsZero();
+    checkIsZero.in <== privKey;
+    checkIsZero.out === 0;
+
     component checkPoint = BabyCheck();
     checkPoint.x <== pubKey[0];
     checkPoint.y <== pubKey[1];

@@ -51,7 +51,9 @@ describe("EncryptedERC - Standalone", () => {
 			mintVerifier,
 			withdrawVerifier,
 			transferVerifier,
-		} = await deployVerifiers(owner);
+			burnVerifier,
+		} = await deployVerifiers(owner, false);
+
 		const babyJubJub = await deployLibrary(owner);
 
 		const registrarFactory = new Registrar__factory(owner);
@@ -72,6 +74,7 @@ describe("EncryptedERC - Standalone", () => {
 			mintVerifier,
 			withdrawVerifier,
 			transferVerifier,
+			burnVerifier,
 			decimals: DECIMALS,
 		});
 
@@ -88,12 +91,6 @@ describe("EncryptedERC - Standalone", () => {
 		it("should deploy registrar properly", async () => {
 			expect(registrar.target).to.not.be.null;
 			expect(registrar).to.not.be.null;
-		});
-
-		it("should initialize properly", async () => {
-			const burnUserAddress = await registrar.burnUser();
-			const burnUserPublicKey = await registrar.userPublicKeys(burnUserAddress);
-			expect(burnUserPublicKey).to.deep.equal([0n, 1n]);
 		});
 
 		describe("Registration", () => {
@@ -534,7 +531,7 @@ describe("EncryptedERC - Standalone", () => {
 				// set as initial balance
 				userBalance = userDecryptedBalance;
 
-				const { proof, senderBalancePCT: userBalancePCT } = await privateBurn(
+				const { proof, userBalancePCT } = await privateBurn(
 					user,
 					userDecryptedBalance,
 					burnAmount,
@@ -542,9 +539,14 @@ describe("EncryptedERC - Standalone", () => {
 					auditorPublicKey,
 				);
 
-				await encryptedERC
-					.connect(user.signer)
-					.privateBurn(proof, userBalancePCT);
+				const tx = await encryptedERC.connect(user.signer).privateBurn(
+					{
+						proofPoints: proof.proofPoints,
+						publicSignals: proof.publicSignals,
+					},
+					userBalancePCT,
+				);
+				await tx.wait();
 
 				validProof = proof;
 			});
@@ -598,30 +600,15 @@ describe("EncryptedERC - Standalone", () => {
 				).to.be.reverted;
 			});
 
-			it("user must set burn user as receiver, if not revert", async () => {
-				const user = users[1];
-
-				const inputs = [...validProof.publicSignals];
-
-				inputs[10] = "100";
-
-				await expect(
-					encryptedERC.connect(user.signer).privateBurn(
-						validProof,
-						Array.from({ length: 7 }, () => 1n),
-					),
-				).to.be.revertedWithCustomError(encryptedERC, "InvalidProof");
-			});
-
 			it("auditor public key should match with proof, if not revert", async () => {
 				const user = users[0];
 
 				const _publicInputs = [...validProof.publicSignals];
 
-				// auditor public key indexes are 23 and 24
-				// only change [23]
-				_publicInputs[23] = "100";
-				_publicInputs[24] = validProof.publicSignals[24];
+				// auditor public key indexes are 10 and 11
+				// only change [10]
+				_publicInputs[10] = "100";
+				_publicInputs[11] = validProof.publicSignals[11];
 
 				await expect(
 					encryptedERC.connect(user.signer).privateBurn(
@@ -633,9 +620,9 @@ describe("EncryptedERC - Standalone", () => {
 					),
 				).to.be.reverted;
 
-				// only change [24]
-				_publicInputs[23] = validProof.publicSignals[23];
-				_publicInputs[24] = "100";
+				// only change [11]
+				_publicInputs[10] = validProof.publicSignals[10];
+				_publicInputs[11] = "100";
 
 				await expect(
 					encryptedERC.connect(user.signer).privateBurn(
@@ -732,7 +719,7 @@ describe("EncryptedERC - Standalone", () => {
 
 				const userEncryptedBalance = [...balance.eGCT.c1, ...balance.eGCT.c2];
 
-				const { proof, senderBalancePCT } = await privateBurn(
+				const { proof, userBalancePCT: senderBalancePCT } = await privateBurn(
 					USER,
 					userBalance,
 					burnAmount,
@@ -849,7 +836,7 @@ describe("EncryptedERC - Standalone", () => {
 
 				const userEncryptedBalance = [...balance.eGCT.c1, ...balance.eGCT.c2];
 
-				const { proof, senderBalancePCT } = await privateBurn(
+				const { proof, userBalancePCT: senderBalancePCT } = await privateBurn(
 					USER,
 					userBalance,
 					burnAmount,
@@ -912,7 +899,7 @@ describe("EncryptedERC - Standalone", () => {
 
 				const userEncryptedBalance = [...balance.eGCT.c1, ...balance.eGCT.c2];
 
-				const { proof, senderBalancePCT } = await privateBurn(
+				const { proof, userBalancePCT: senderBalancePCT } = await privateBurn(
 					USER,
 					userBalance,
 					burnAmount,
