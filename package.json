@@ -14,7 +14,7 @@
 		"@zk-kit/baby-jubjub": "^1.0.3",
 		"dotenv": "^16.4.7",
 		"hardhat": "^2.22.15",
-		"hardhat-gas-reporter": "^2.2.2",
+		"hardhat-gas-reporter": "^2.2.3",
 		"maci-crypto": "^2.0.0",
 		"poseidon-lite": "^0.3.0",
 		"prettier": "^3.5.3",
