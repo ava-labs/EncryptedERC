@@ -1,0 +1,38 @@
+{
+  "name": "eerc-deploy-cli",
+  "version": "1.0.0",
+  "description": "CLI tool for deploying EncryptedERC tokens",
+  "main": "dist/index.js",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "ts-node src/index.ts"
+  },
+  "keywords": [
+    "ethereum",
+    "erc20",
+    "encrypted",
+    "deploy"
+  ],
+  "author": "Vageshwar",
+  "license": "ISC",
+  "dependencies": {
+    "@nomicfoundation/hardhat-ethers": "^3.0.8",
+    "chalk": "^5.4.1",
+    "commander": "^13.1.0",
+    "dotenv": "^16.5.0",
+    "ethers": "^6.13.7",
+    "inquirer": "^12.6.0",
+    "ora": "^8.2.0"
+  },
+  "devDependencies": {
+    "@types/inquirer": "^9.0.7",
+    "@types/node": "^20.0.0",
+    "ts-node": "^10.9.0",
+    "typescript": "^5.0.0"
+  },
+  "bin": {
+    "eerc-deploy": "./dist/index.js"
+  }
+}
