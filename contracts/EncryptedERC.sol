@@ -514,8 +514,10 @@ contract EncryptedERC is TokenTracker, EncryptedUserBalances, AuditorManager {
         // Convert tokens to encrypted tokens
         (dust, tokenId) = _convertFrom(to, amount, tokenAddress, amountPCT);
 
-        // Return dust to user
-        SafeERC20.safeTransfer(token, to, dust);
+        // Return dust to user, if any
+        if (dust > 0) {
+            SafeERC20.safeTransfer(token, to, dust);
+        }
 
         // Emit deposit event
         emit Deposit(to, amount, dust, tokenId);
