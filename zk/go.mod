@@ -1,6 +1,7 @@
 module github.com/ava-labs/EncryptedERC
 
-go 1.22.6
+go 1.24.0
+
 toolchain go1.24.1
 
 require (
@@ -23,8 +24,8 @@ require (
 	github.com/ronanh/intcomp v1.1.0 // indirect
 	github.com/rs/zerolog v1.33.0 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
-	golang.org/x/crypto v0.35.0 // indirect
+	golang.org/x/crypto v0.45.0 // indirect
 	golang.org/x/sync v0.8.0 // indirect
-	golang.org/x/sys v0.30.0 // indirect
+	golang.org/x/sys v0.38.0 // indirect
 	rsc.io/tmplfunc v0.0.3 // indirect
 )
