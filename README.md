@@ -8,6 +8,131 @@
 [![Security Audit](https://img.shields.io/badge/Security%20Audit-Passed-green)](https://github.com/ava-labs/EncryptedERC/tree/main/audit)
 [![Documentation](https://img.shields.io/badge/docs-available-green)](https://docs.avacloud.io/encrypted-erc)
 
+# AvaDB — Encrypted ERC-20 Protocol + Decentralised Storage
+
+> **AvaDB** extends the eERC privacy stack with a fully on-chain decentralised
+> storage layer optimised for the AvaDB custom L1 (Chain ID `1152111412`).
+
+## AvaDB Storage System
+
+### Architecture overview
+
+```
+ User
+  │  uploadChunk(bytes, requiredReplicas, isPrivate)
+  ▼
+AvaDBStorage.sol  ──── emits ChunkUploaded(chunkId, data, …)
+  │                               │
+  │  (only metadata in state)     │  (raw bytes in event logs — cheap)
+  │                               ▼
+  │                       Replicator nodes (avadb-node)
+  │                          │  verify hash
+  │                          │  store in RocksDB (binary)
+  │                          │  store metadata in Oracle
+  │                          │  compute CID (sha256)
+  │                          ▼
+  │  confirmReplication(chunkId, cid, endpoint)
+  ◄──────────────────────────┘
+  │  (60 % threshold reached)
+  ▼
+  emit ChunkCooled(chunkId, cid)
+  │
+  │  Hot → Cool state transition
+  │  on-chain: only CID remains
+  │  data lives in replicator nodes
+  ▼
+ User queries /chunk/:id/data
+  └─► any replicator serves raw bytes over HTTP
+```
+
+### Hot state (economical design)
+
+Raw chunk bytes are **never written to contract storage**. They are emitted
+inside the `ChunkUploaded` event (`~8 gas / non-zero byte` vs `~20 000 gas / 32
+bytes` for storage). Replicator nodes scan the transaction log, extract the
+data, verify the keccak256 hash, and persist it locally.
+
+### Cool state
+
+Once ≥ 60 % of the required replicators have confirmed, the contract flips
+`state` to `Cool` and emits `ChunkCooled`. From that point on, only the
+content-addressed CID is kept on-chain; the raw bytes live in the replicator
+fleet.
+
+### Access control
+
+Chunks can be marked `isPrivate`. Only the owner and addresses explicitly
+granted via `grantAccess` may request the data. All uploaders must be
+registered in the shared `Registrar` contract (same ZK identity layer as eERC).
+
+### AvaDB Network
+
+| Field        | Value                                                                                 |
+| ------------ | ------------------------------------------------------------------------------------- |
+| Network Name | avadb                                                                                 |
+| RPC URL      | `http://127.0.0.1:9654/ext/bc/2aaCzyq19qTZLZVzDn2XxQdVwpcq945pwmrUJrdYvufJT7B4KC/rpc` |
+| Chain ID     | `1152111412`                                                                          |
+| Token Symbol | `avadb`                                                                               |
+| Token Name   | avadb Token                                                                           |
+
+### Deploy AvaDB contracts
+
+```sh
+# Copy and fill in your private key
+cp avadb-node/.env.example avadb-node/.env
+
+# Deploy to the AvaDB L1
+npx hardhat run scripts/deploy-avadb.ts --network avadb
+
+# Or to Avalanche mainnet / Fuji testnet
+npx hardhat run scripts/deploy-avadb.ts --network avalanche
+npx hardhat run scripts/deploy-avadb.ts --network fuji
+```
+
+### Run a replicator node
+
+```sh
+cd avadb-node
+npm install
+
+# Fill in your .env (copy .env.example, set private key + contract addresses)
+cp .env.example .env
+
+# Development (with hot reload)
+npm run start:dev
+
+# Production
+npm run build
+npm run start:prod
+```
+
+Node exposes:
+
+- `GET  /status` — health check + current block
+- `POST /query` — JSON query language (filter, sort, paginate)
+- `GET  /chunk/:id/meta` — chunk metadata
+- `GET  /chunk/:id/data` — raw binary download
+- `GET  /docs` — Swagger/OpenAPI UI
+
+### JSON query language example
+
+```json
+POST /query
+{
+  "filter": {
+    "owner":     "0xYourAddress",
+    "state":     1,
+    "isPrivate": false
+  },
+  "orderBy": "uploadedAt",
+  "order":   "desc",
+  "limit":   20,
+  "offset":  0
+}
+```
+
+---
+
 # Encrypted ERC-20 Protocol
 
 The Encrypted ERC-20 (eERC) standard, developed by [AvaCloud](https://avacloud.io), enables secure and confidential token transfers on Avalanche blockchains. Leveraging zk-SNARKs and partially homomorphic encryption, the eERC protocol offers robust privacy without requiring protocol-level modifications or off-chain intermediaries.
@@ -23,9 +148,7 @@ AvaCloud API documentation can be found [here](https://docs.avacloud.io/encrypte
 
 - **Fully On-chain Nature**: Operates entirely on-chain without the need for relayers or off-chain actors.
 
-
 - **Built-in Compliance**: Supports external and rotatable auditors, ensuring regulatory compliance.
-
 
 - **Dual-Mode Operation**: Supports both creating new private tokens and converting existing ERC-20 tokens their private versions.
 
@@ -34,7 +157,6 @@ AvaCloud API documentation can be found [here](https://docs.avacloud.io/encrypte
 - **Chain Agnostic**: Can be deployed on any EVM-compatible blockchain.
 
 - **(NEW) Encrypted Metadata**: Allows users to send arbitrary-length encrypted metadata along with transactions.
-
 
 ## Architecture
 
