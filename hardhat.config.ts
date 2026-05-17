@@ -11,6 +11,13 @@ import dotenv from "dotenv";
 dotenv.config();
 
 const RPC_URL = process.env.RPC_URL || "https://api.avax.network/ext/bc/C/rpc";
+const PRIVATE_KEY = process.env.PRIVATE_KEY;
+const accounts = PRIVATE_KEY ? [PRIVATE_KEY] : [];
+
+// AvaDB custom L1 (local development node)
+const AVADB_RPC =
+  process.env.AVADB_RPC_URL ||
+  "http://127.0.0.1:9654/ext/bc/2aaCzyq19qTZLZVzDn2XxQdVwpcq945pwmrUJrdYvufJT7B4KC/rpc";
 
 const config: HardhatUserConfig = {
   solidity: {
@@ -29,6 +36,25 @@ const config: HardhatUserConfig = {
         blockNumber: 59121339,
         enabled: !!process.env.FORKING,
       },
+    },
+    // Avalanche C-Chain mainnet
+    avalanche: {
+      url: "https://api.avax.network/ext/bc/C/rpc",
+      chainId: 43114,
+      accounts,
+    },
+    // Avalanche Fuji testnet
+    fuji: {
+      url: "https://api.avax-test.network/ext/bc/C/rpc",
+      chainId: 43113,
+      accounts,
+    },
+    // AvaDB custom L1 — optimised for cheap storage operations
+    avadb: {
+      url: AVADB_RPC,
+      chainId: 1152111412,
+      accounts,
+      gasPrice: "auto",
     },
   },
   gasReporter: {

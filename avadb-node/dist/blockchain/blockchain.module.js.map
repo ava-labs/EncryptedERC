@@ -1,0 +1,1 @@
+{"version":3,"file":"blockchain.module.js","sourceRoot":"","sources":["../../src/blockchain/blockchain.module.ts"],"names":[],"mappings":";;;;;;;;;AAAA,2CAAwC;AACxC,6DAAyD;AAMlD,IAAM,gBAAgB,GAAtB,MAAM,gBAAgB;CAAG,CAAA;AAAnB,4CAAgB;2BAAhB,gBAAgB;IAJ5B,IAAA,eAAM,EAAC;QACN,SAAS,EAAE,CAAC,sCAAiB,CAAC;QAC9B,OAAO,EAAE,CAAC,sCAAiB,CAAC;KAC7B,CAAC;GACW,gBAAgB,CAAG"}
