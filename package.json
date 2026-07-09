@@ -24,7 +24,12 @@
 	},
 	"scripts": {
 		"test": "mocha 'src/**/*.test.js'",
-		"postinstall": "npx hardhat compile & npx hardhat zkit make --force && npx hardhat zkit verifiers",
+		"compile": "node scripts/run-compile.cjs",
+		"postinstall": "node scripts/run-compile.cjs",
+		"hardhat:compile": "hardhat compile",
+		"zkit:make": "hardhat zkit make --force && node scripts/fix-win-paths.js",
+		"zkit:fix-paths": "node scripts/fix-win-paths.js",
+		"zkit:verifiers": "node scripts/run-zkit-verifiers.cjs",
 		"lint:sol": "solhint '**/*.sol' --config ./.solhint.json --ignore-path ./.solhintignore --max-warnings 0 && npx prettier --check '**/*.sol' --config ./.prettierrc",
 		"lint:ts": "npx biome lint .",
 		"lint": "npm run lint:sol && npm run lint:ts"
