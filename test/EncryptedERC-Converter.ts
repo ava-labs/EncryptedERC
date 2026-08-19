@@ -58,7 +58,7 @@ describe("EncryptedERC - Converter", () => {
 			withdrawVerifier,
 			transferVerifier,
 			burnVerifier,
-		} = await deployVerifiers(owner);
+		} = await deployVerifiers(owner, false);
 		const babyJubJub = await deployLibrary(owner);
 
 		for (const d of [6, 18, DECIMALS]) {

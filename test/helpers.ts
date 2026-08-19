@@ -45,7 +45,7 @@ import type { User } from "./user";
  */
 export const deployVerifiers = async (
 	signer: SignerWithAddress,
-	isProd?: boolean,
+	isProd: boolean,
 ) => {
 	if (isProd) {
 		const registrationVerifierFactory = new RegistrationVerifier__factory(
