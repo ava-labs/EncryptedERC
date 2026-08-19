@@ -18,7 +18,7 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 import {CreateEncryptedERCParams, Point, EGCT, EncryptedBalance, AmountPCT, MintProof, TransferProof, WithdrawProof, BurnProof, TransferInputs} from "./types/Types.sol";
 
 // errors
-import {UserNotRegistered, InvalidProof, TransferFailed, UnknownToken, InvalidChainId, InvalidNullifier, ZeroAddress} from "./errors/Errors.sol";
+import {UserNotRegistered, InvalidProof, TransferFailed, UnknownToken, InvalidChainId, InvalidNullifier, ZeroAddress, AmountTooSmall} from "./errors/Errors.sol";
 
 // interfaces
 import {IRegistrar} from "./interfaces/IRegistrar.sol";
@@ -723,6 +723,13 @@ contract EncryptedERC is
         else if (registeredDecimals < decimals) {
             scalingFactor = 10 ** (decimals - registeredDecimals);
             value = amount / scalingFactor;
+        }
+
+        // Reject amounts that scale down to nothing. The caller's encrypted balance has
+        // already been debited by the full amount at this point, so paying out zero would
+        // destroy the value silently and still emit a Withdraw event for it.
+        if (value == 0) {
+            revert AmountTooSmall();
         }
 
         // Transfer the tokens to the receiver

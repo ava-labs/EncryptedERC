@@ -790,7 +790,8 @@ describe("EncryptedERC - Converter", () => {
 
 		describe("Withdrawing Tokens - Lower ERC20 Decimals (6)", () => {
 			const tokenId = 2;
-			const withdrawAmount = 1000n;
+			// eERC has 10 decimals and this token has 6, check that the scaling factor is applied properly
+			const withdrawAmount = 10_000n;
 			let userInitialBalance: bigint;
 			let validProof: {
 				proof: CalldataWithdrawCircuitGroth16;
@@ -834,12 +835,21 @@ describe("EncryptedERC - Converter", () => {
 
 				const encryptedMetadata = encryptMetadata(user.publicKey, MESSAGE);
 
+				const token = erc20s[0]; // tokenId 2 is the 6-decimal token
+				const erc20BalanceBefore = await token.balanceOf(user.signer.address);
+
 				const tx = await encryptedERC
 					.connect(user.signer)
 					[
 						"withdraw(uint256,((uint256[2],uint256[2][2],uint256[2]),uint256[16]),uint256[7],bytes)"
 					](tokenId, proof, userBalancePCT, encryptedMetadata);
 				const receipt = await tx.wait();
+
+				const erc20BalanceAfter = await token.balanceOf(user.signer.address);
+				expect(erc20BalanceAfter).to.be.greaterThan(erc20BalanceBefore);
+				expect(erc20BalanceAfter).to.equal(
+					erc20BalanceBefore + withdrawAmount / 10n ** BigInt(DECIMALS - 6),
+				);
 
 				const events = await encryptedERC.queryFilter(
 					encryptedERC.filters.PrivateMessage,
@@ -877,6 +887,40 @@ describe("EncryptedERC - Converter", () => {
 				);
 
 				expect(totalBalance).to.equal(userInitialBalance - withdrawAmount);
+			});
+
+			it("should revert if the amount scales down to zero tokens", async () => {
+				const user = users[0];
+				const balance = await encryptedERC.balanceOf(
+					user.signer.address,
+					tokenId,
+				);
+				const userEncryptedBalance = [...balance.eGCT.c1, ...balance.eGCT.c2];
+				const currentBalance = await getDecryptedBalance(
+					user.privateKey,
+					balance.amountPCTs,
+					balance.balancePCT,
+					balance.eGCT,
+				);
+
+				// below the 10^4 scaling factor, so _convertTo would floor the payout to 0
+				// while the encrypted balance had already been debited in full
+				const dustAmount = 999n;
+				const { proof, userBalancePCT } = await withdraw(
+					dustAmount,
+					user,
+					userEncryptedBalance,
+					currentBalance,
+					auditorPublicKey,
+				);
+
+				await expect(
+					encryptedERC
+						.connect(user.signer)
+						[
+							"withdraw(uint256,((uint256[2],uint256[2][2],uint256[2]),uint256[16]),uint256[7])"
+						](tokenId, proof, userBalancePCT),
+				).to.be.revertedWithCustomError(encryptedERC, "AmountTooSmall");
 			});
 
 			it("should revert if public keys are not matching", async () => {
@@ -956,6 +1000,12 @@ describe("EncryptedERC - Converter", () => {
 					auditorPublicKey,
 				);
 
+				const tokenAddress = await encryptedERC.tokenAddresses(tokenId);
+				const token = erc20s.find((t) => t.target === tokenAddress);
+				if (!token) throw new Error("token for tokenId not found");
+				const tokenDecimals = Number(await token.decimals());
+				const erc20BalanceBefore = await token.balanceOf(user.signer.address);
+
 				expect(
 					await encryptedERC
 						.connect(user.signer)
@@ -963,6 +1013,16 @@ describe("EncryptedERC - Converter", () => {
 							"withdraw(uint256,((uint256[2],uint256[2][2],uint256[2]),uint256[16]),uint256[7])"
 						](tokenId, proof, userBalancePCT),
 				).to.be.not.reverted;
+
+				// the underlying token must actually move, and by the scaled amount
+				const expectedRaw =
+					tokenDecimals >= DECIMALS
+						? withdrawAmount * 10n ** BigInt(tokenDecimals - DECIMALS)
+						: withdrawAmount / 10n ** BigInt(DECIMALS - tokenDecimals);
+				expect(expectedRaw).to.be.greaterThan(0n);
+				expect(await token.balanceOf(user.signer.address)).to.equal(
+					erc20BalanceBefore + expectedRaw,
+				);
 
 				validProof = { proof, userBalancePCT };
 			});
@@ -1080,6 +1140,12 @@ describe("EncryptedERC - Converter", () => {
 					auditorPublicKey,
 				);
 
+				const tokenAddress = await encryptedERC.tokenAddresses(tokenId);
+				const token = erc20s.find((t) => t.target === tokenAddress);
+				if (!token) throw new Error("token for tokenId not found");
+				const tokenDecimals = Number(await token.decimals());
+				const erc20BalanceBefore = await token.balanceOf(user.signer.address);
+
 				expect(
 					await encryptedERC
 						.connect(user.signer)
@@ -1087,6 +1153,16 @@ describe("EncryptedERC - Converter", () => {
 							"withdraw(uint256,((uint256[2],uint256[2][2],uint256[2]),uint256[16]),uint256[7])"
 						](tokenId, proof, userBalancePCT),
 				).to.be.not.reverted;
+
+				// the underlying token must actually move, and by the scaled amount
+				const expectedRaw =
+					tokenDecimals >= DECIMALS
+						? withdrawAmount * 10n ** BigInt(tokenDecimals - DECIMALS)
+						: withdrawAmount / 10n ** BigInt(DECIMALS - tokenDecimals);
+				expect(expectedRaw).to.be.greaterThan(0n);
+				expect(await token.balanceOf(user.signer.address)).to.equal(
+					erc20BalanceBefore + expectedRaw,
+				);
 
 				validProof = { proof, userBalancePCT };
 			});
