@@ -391,6 +391,13 @@ template CheckRegistrationHash() {
     signal input senderPrivateKey;
     signal input senderAddress;
 
+    // Verify the sender address fits in 160 bits
+    // Registrar.register() reads the account as address(uint160(input[2])). Without this
+    // bound, senderAddress + k * 2^160 hashes differently while resolving to the same
+    // account, which defeats the duplicate-registration guard.
+    component addressBits = Num2Bits(160);
+    addressBits.in <== senderAddress;
+
     component hash = Poseidon(3);
     hash.inputs[0] <== chainID;
     hash.inputs[1] <== senderPrivateKey;
