@@ -15,7 +15,7 @@ import {BabyJubJub} from "./libraries/BabyJubJub.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 // types
-import {CreateEncryptedERCParams, Point, EGCT, EncryptedBalance, AmountPCT, MintProof, TransferProof, WithdrawProof, BurnProof, TransferInputs} from "./types/Types.sol";
+import {CreateEncryptedERCParams, Point, EGCT, AmountPCT, MintProof, TransferProof, WithdrawProof, BurnProof, TransferInputs} from "./types/Types.sol";
 
 // errors
 import {UserNotRegistered, InvalidProof, TransferFailed, UnknownToken, InvalidChainId, InvalidNullifier, ZeroAddress, AmountTooSmall} from "./errors/Errors.sol";
@@ -671,24 +671,11 @@ contract EncryptedERC is
                 value
             );
 
-            // Add to the receiver's balance
-            EncryptedBalance storage balance = balances[to][tokenId];
-
-            if (balance.eGCT.c1.x == 0 && balance.eGCT.c1.y == 0) {
-                balance.eGCT = eGCT;
-            } else {
-                balance.eGCT.c1 = BabyJubJub._add(balance.eGCT.c1, eGCT.c1);
-                balance.eGCT.c2 = BabyJubJub._add(balance.eGCT.c2, eGCT.c2);
-            }
-
-            // Update transaction history
-            balance.amountPCTs.push(
-                AmountPCT({pct: amountPCT, index: balance.transactionIndex})
-            );
-            balance.transactionIndex++;
-
-            // Commit the new balance
-            _commitUserBalance(to, tokenId);
+            // Add to the receiver's balance and record the amount PCT.
+            // Shared with the transfer and mint paths on purpose: this used to be an inline
+            // copy of _addToUserBalance, which meant the MAX_PENDING_AMOUNT_PCTS ceiling in
+            // _addToUserHistory did not apply to deposits.
+            _addToUserBalance(to, tokenId, eGCT, amountPCT);
         }
 
         return (dust, tokenId);
