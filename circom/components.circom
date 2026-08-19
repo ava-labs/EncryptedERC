@@ -113,6 +113,13 @@ template ElGamalEncrypt() {
     checkPoint2.x <== msg[0];
     checkPoint2.y <== msg[1];
 
+    // Verify the randomness is not zero
+    // With random = 0 the ciphertext degenerates to (identity, msg), which any observer can
+    // read, so the encrypted value would no longer be private.
+    component checkRandomIsZero = IsZero();
+    checkRandomIsZero.in <== random;
+    checkRandomIsZero.out === 0;
+
     component randomBits = Num2Bits(253);
     randomBits.in <== random;
 
@@ -334,6 +341,13 @@ template CheckPCT() {
     lt.in[0] <== random;
     lt.in[1] <== baseOrder;
     lt.out === 1;
+
+    // Verify the randomness is not zero
+    // With random = 0 both the auth key and the encryption key become the identity point,
+    // which is public knowledge, so anyone could decrypt the PCT.
+    component checkRandomIsZero = IsZero();
+    checkRandomIsZero.in <== random;
+    checkRandomIsZero.out === 0;
 
     component checkAuthKey = BabyPbk();
     checkAuthKey.in <== random;
