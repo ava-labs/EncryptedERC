@@ -33,3 +33,8 @@ jobs:
 
       - name: "Run linter"
         run: "npm run lint"
+
+      - name: "Check verification keys"
+        # Fails if any Groth16 key has delta == gamma (trapdoor delta = 1, forgeable for any
+        # statement), or if a production key's IC commitments no longer match the circuits.
+        run: "npm run check:verifiers"
