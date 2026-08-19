@@ -54,8 +54,7 @@ template PoseidonDecrypt(l) {
     // Check the last ciphertext element
     ciphertext[decryptedLength] === strategies[n].out[1];
 
-    // If length > 3, check if the last (3 - (l mod 3)) elements of the message
-    // are 0
+    // If length not devisible by 3 then add padding
     if (l % 3 > 0) {
         if (l % 3 == 1) {
             decrypted[decryptedLength - 1] === 0;
