@@ -27,7 +27,6 @@ import {IWithdrawVerifier} from "./interfaces/verifiers/IWithdrawVerifier.sol";
 import {ITransferVerifier} from "./interfaces/verifiers/ITransferVerifier.sol";
 import {IBurnVerifier} from "./interfaces/verifiers/IBurnVerifier.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 
 //             /$$$$$$$$ /$$$$$$$   /$$$$$$
 //            | $$_____/| $$__  $$ /$$__  $$
@@ -621,30 +620,31 @@ contract EncryptedERC is
         address tokenAddress,
         uint256[7] memory amountPCT
     ) internal returns (uint256 dust, uint256 tokenId) {
-        // Get token decimals and handle scaling
-        uint8 tokenDecimals = IERC20Metadata(tokenAddress).decimals();
+        // Register the token if it's new. This captures decimals() once, at registration, so a
+        // token cannot report one value on deposit and another on withdrawal.
+        if (tokenIds[tokenAddress] == 0) {
+            _addToken(tokenAddress);
+        }
+        tokenId = tokenIds[tokenAddress];
+
+        // Get the registered token decimals and handle scaling
+        uint8 registeredDecimals = tokenDecimals[tokenId];
 
         uint256 value = amount;
         dust = 0;
 
         // Scale down if token has more decimals
-        if (tokenDecimals > decimals) {
-            uint256 scalingFactor = 10 ** (tokenDecimals - decimals);
+        if (registeredDecimals > decimals) {
+            uint256 scalingFactor = 10 ** (registeredDecimals - decimals);
             value = amount / scalingFactor;
             dust = amount % scalingFactor;
         }
         // Scale up if token has fewer decimals
-        else if (tokenDecimals < decimals) {
-            uint256 scalingFactor = 10 ** (decimals - tokenDecimals);
+        else if (registeredDecimals < decimals) {
+            uint256 scalingFactor = 10 ** (decimals - registeredDecimals);
             value = amount * scalingFactor;
             dust = 0;
         }
-
-        // Register the token if it's new
-        if (tokenIds[tokenAddress] == 0) {
-            _addToken(tokenAddress);
-        }
-        tokenId = tokenIds[tokenAddress];
 
         // Return early if the scaled value is zero
         if (value == 0) {
@@ -708,20 +708,20 @@ contract EncryptedERC is
         uint256 amount,
         address tokenAddress
     ) internal {
-        // Get token decimals and handle scaling
-        uint256 tokenDecimals = IERC20Metadata(tokenAddress).decimals();
+        // Get the registered token decimals and handle scaling
+        uint256 registeredDecimals = tokenDecimals[tokenIds[tokenAddress]];
 
         uint256 value = amount;
         uint256 scalingFactor = 0;
 
         // Scale up if token has more decimals
-        if (tokenDecimals > decimals) {
-            scalingFactor = 10 ** (tokenDecimals - decimals);
+        if (registeredDecimals > decimals) {
+            scalingFactor = 10 ** (registeredDecimals - decimals);
             value = amount * scalingFactor;
         }
         // Scale down if token has fewer decimals
-        else if (tokenDecimals < decimals) {
-            scalingFactor = 10 ** (decimals - tokenDecimals);
+        else if (registeredDecimals < decimals) {
+            scalingFactor = 10 ** (decimals - registeredDecimals);
             value = amount / scalingFactor;
         }
 
