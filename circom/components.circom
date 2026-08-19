@@ -59,9 +59,9 @@ template PoseidonDecrypt(l) {
     if (l % 3 > 0) {
         if (l % 3 == 1) {
             decrypted[decryptedLength - 1] === 0;
+            decrypted[decryptedLength - 2] === 0;
         } else if (l % 3 == 2) {
             decrypted[decryptedLength - 1] === 0;
-            decrypted[decryptedLength - 2] === 0;
         }
     }
 }
