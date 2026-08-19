@@ -657,6 +657,15 @@ contract EncryptedERC is
             uint256[2] memory publicKey = registrar.getUserPublicKey(to);
 
             // Encrypt the value with the receiver's public key
+            //
+            // NOTE: BabyJubJub.encrypt uses a fixed randomness of 1, because a contract has no
+            // source of randomness. Deposit ciphertexts are therefore deterministic: equal
+            // amounts to the same key produce identical ciphertexts, and the accumulated
+            // randomness of a deposit-only account is just its publicly observable operation
+            // count. Such a balance is derivable by anyone from the deposit and withdrawal
+            // amounts, which are already public in the ERC20 transfers -- but it does mean a
+            // converter balance carries no confidentiality until the account receives a
+            // private transfer with real randomness.
             EGCT memory eGCT = BabyJubJub.encrypt(
                 Point({x: publicKey[0], y: publicKey[1]}),
                 value
