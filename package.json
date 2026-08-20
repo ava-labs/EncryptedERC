@@ -27,8 +27,7 @@
 		"postinstall": "npx hardhat compile & npx hardhat zkit make --force && npx hardhat zkit verifiers",
 		"lint:sol": "solhint '**/*.sol' --config ./.solhint.json --ignore-path ./.solhintignore --max-warnings 0 && npx prettier --check '**/*.sol' --config ./.prettierrc",
 		"lint:ts": "npx biome lint .",
-		"lint": "npm run lint:sol && npm run lint:ts",
-		"check:verifiers": "node scripts/check-verifier-keys.js"
+		"lint": "npm run lint:sol && npm run lint:ts"
 	},
 	"keywords": [],
 	"author": "",
