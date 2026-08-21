@@ -151,7 +151,7 @@ describe("EncryptedERC withdrawal at the pending-history cap", () => {
       ](tokenId, proof, userBalancePCT);
     const receipt = await tx.wait();
 
-    expect(receipt!.gasUsed).to.be.lessThan(C_CHAIN_BLOCK_GAS_LIMIT);
+    expect(receipt?.gasUsed).to.be.lessThan(C_CHAIN_BLOCK_GAS_LIMIT);
     expect(await token.balanceOf(victim.signer.address)).to.equal(
       tokenBalanceBefore + withdrawalAmount,
     );

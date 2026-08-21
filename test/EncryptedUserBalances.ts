@@ -48,7 +48,7 @@ describe("EncryptedUserBalances pending history", () => {
     // Avalanche C-Chain's documented block gas limit reference is 15M. This is
     // intentionally only a benchmark guard: a full transfer/withdrawal must be
     // measured separately because it also includes proof verification and payout work.
-    expect(receipt!.gasUsed).to.be.lessThan(12_000_000n);
+    expect(receipt?.gasUsed).to.be.lessThan(12_000_000n);
     expect(
       await harness.pendingHistoryLength(victim.address, tokenId),
     ).to.equal(0n);
