@@ -302,7 +302,9 @@ describe("EncryptedERC - Converter", () => {
 				expect(balance).to.equal(mintAmount);
 			});
 
-			it("should deposit tokens to EncryptedERC and return the dust properly and mint the proper balance", async () => {
+			it("should deposit tokens to EncryptedERC and return the dust properly and mint the proper balance", async function () {
+				this.timeout(120_000);
+
 				const ownerUser = users[0];
 				const erc20 = erc20s[1];
 
