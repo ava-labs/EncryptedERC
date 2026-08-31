@@ -8,14 +8,13 @@ const main = async () => {
 	const [deployer] = await ethers.getSigners();
 
 	// deploy verifiers
-	// if true, deploys verifiers for prod, generated with proper trusted setup
 	const {
 		registrationVerifier,
 		mintVerifier,
 		withdrawVerifier,
 		transferVerifier,
 		burnVerifier,
-	} = await deployVerifiers(deployer);
+	} = await deployVerifiers(deployer, true);
 
 	// deploy babyjub library
 	const babyJubJub = await deployLibrary(deployer);

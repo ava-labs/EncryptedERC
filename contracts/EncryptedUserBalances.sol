@@ -6,7 +6,7 @@
 pragma solidity 0.8.27;
 
 import {EncryptedBalance, EGCT, BalanceHistory, AmountPCT} from "./types/Types.sol";
-import {InvalidProof} from "./errors/Errors.sol";
+import {InvalidProof, PendingHistoryLimitReached} from "./errors/Errors.sol";
 import {BabyJubJub} from "./libraries/BabyJubJub.sol";
 
 /**
@@ -21,6 +21,13 @@ import {BabyJubJub} from "./libraries/BabyJubJub.sol";
  * allowing users to prove they have sufficient funds without revealing the actual amount.
  */
 contract EncryptedUserBalances {
+    ///////////////////////////////////////////////////
+    ///                   Constants                 ///
+    ///////////////////////////////////////////////////
+
+    // Add limit to pending history to keep the gas cost of pruning history affordable for each account.
+    uint256 public constant MAX_PENDING_AMOUNT_PCTS = 300;
+
     ///////////////////////////////////////////////////
     ///                   State Variables           ///
     ///////////////////////////////////////////////////
@@ -182,6 +189,11 @@ contract EncryptedUserBalances {
         uint256[7] memory amountPCT
     ) internal {
         EncryptedBalance storage balance = balances[user][tokenId];
+
+        // bound the pending history so the prune loop stays affordable for the account
+        if (balance.amountPCTs.length >= MAX_PENDING_AMOUNT_PCTS) {
+            revert PendingHistoryLimitReached();
+        }
 
         uint256 nonce = balance.nonce;
         uint256 balanceHash = _hashEGCT(balance.eGCT);

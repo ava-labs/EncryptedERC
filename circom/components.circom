@@ -54,14 +54,13 @@ template PoseidonDecrypt(l) {
     // Check the last ciphertext element
     ciphertext[decryptedLength] === strategies[n].out[1];
 
-    // If length > 3, check if the last (3 - (l mod 3)) elements of the message
-    // are 0
+    // If length not devisible by 3 then add padding
     if (l % 3 > 0) {
         if (l % 3 == 1) {
             decrypted[decryptedLength - 1] === 0;
+            decrypted[decryptedLength - 2] === 0;
         } else if (l % 3 == 2) {
             decrypted[decryptedLength - 1] === 0;
-            decrypted[decryptedLength - 2] === 0;
         }
     }
 }
@@ -112,6 +111,13 @@ template ElGamalEncrypt() {
     component checkPoint2 = BabyCheck();
     checkPoint2.x <== msg[0];
     checkPoint2.y <== msg[1];
+
+    // Verify the randomness is not zero
+    // With random = 0 the ciphertext degenerates to (identity, msg), which any observer can
+    // read, so the encrypted value would no longer be private.
+    component checkRandomIsZero = IsZero();
+    checkRandomIsZero.in <== random;
+    checkRandomIsZero.out === 0;
 
     component randomBits = Num2Bits(253);
     randomBits.in <== random;
@@ -335,6 +341,13 @@ template CheckPCT() {
     lt.in[1] <== baseOrder;
     lt.out === 1;
 
+    // Verify the randomness is not zero
+    // With random = 0 both the auth key and the encryption key become the identity point,
+    // which is public knowledge, so anyone could decrypt the PCT.
+    component checkRandomIsZero = IsZero();
+    checkRandomIsZero.in <== random;
+    checkRandomIsZero.out === 0;
+
     component checkAuthKey = BabyPbk();
     checkAuthKey.in <== random;
 
@@ -376,6 +389,13 @@ template CheckRegistrationHash() {
     signal input chainID;
     signal input senderPrivateKey;
     signal input senderAddress;
+
+    // Verify the sender address fits in 160 bits
+    // Registrar.register() reads the account as address(uint160(input[2])). Without this
+    // bound, senderAddress + k * 2^160 hashes differently while resolving to the same
+    // account, which defeats the duplicate-registration guard.
+    component addressBits = Num2Bits(160);
+    addressBits.in <== senderAddress;
 
     component hash = Poseidon(3);
     hash.inputs[0] <== chainID;

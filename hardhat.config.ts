@@ -54,7 +54,7 @@ const config: HardhatUserConfig = {
     setupSettings: {
       contributionSettings: {
         provingSystem: "groth16",
-        contributions: 0,
+        contributions: 1,
       },
       onlyFiles: [],
       skipFiles: [],

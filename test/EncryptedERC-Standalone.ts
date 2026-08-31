@@ -209,6 +209,30 @@ describe("EncryptedERC - Standalone", () => {
 				).to.be.revertedWithCustomError(registrar, "UserAlreadyRegistered");
 			});
 
+			it("already registered user can not register again with a new key", async () => {
+				const alreadyRegisteredSigner = users[4].signer;
+				const rotated = new User(alreadyRegisteredSigner);
+				const chainId = await ethers.provider
+					.getNetwork()
+					.then((network) => network.chainId);
+
+				const zkProof = await registrationCircuit.generateProof({
+					SenderPrivateKey: rotated.formattedPrivateKey,
+					SenderPublicKey: rotated.publicKey,
+					SenderAddress: BigInt(alreadyRegisteredSigner.address),
+					ChainID: chainId,
+					RegistrationHash: rotated.genRegistrationHash(chainId),
+				});
+				const calldata = await registrationCircuit.generateCalldata(zkProof);
+
+				await expect(
+					registrar.connect(alreadyRegisteredSigner).register({
+						proofPoints: calldata.proofPoints,
+						publicSignals: calldata.publicSignals,
+					} as RegisterProofStruct),
+				).to.be.revertedWithCustomError(registrar, "UserAlreadyRegistered");
+			});
+
 			it("should revert if sender is not matching", async () => {
 				// valid proof is for user[4] but we are using user[0]
 				const sender = users[0];

@@ -102,7 +102,7 @@ contract Registrar {
         }
 
         // check if the user is already registered
-        if (isRegistered[registrationHash] && isUserRegistered(account)) {
+        if (isRegistered[registrationHash] || isUserRegistered(account)) {
             revert UserAlreadyRegistered();
         }
 

@@ -7,6 +7,7 @@ pragma solidity 0.8.27;
 
 import {Ownable2Step, Ownable} from "@openzeppelin/contracts/access/Ownable2Step.sol";
 import {TokenBlacklisted, InvalidOperation} from "../errors/Errors.sol";
+import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 
 /**
  * @title TokenTracker
@@ -44,6 +45,9 @@ contract TokenTracker is Ownable2Step {
     /// @notice Mapping to track blacklisted tokens
     mapping(address tokenAddress => bool isBlacklisted)
         public blacklistedTokens;
+
+    /// @notice Decimals reported by each registered token, captured at registration
+    mapping(uint256 tokenId => uint8 decimals) public tokenDecimals;
 
     ///////////////////////////////////////////////////
     ///                   Modifiers                 ///
@@ -139,6 +143,7 @@ contract TokenTracker is Ownable2Step {
         uint256 newTokenId = nextTokenId;
         tokenIds[tokenAddress] = newTokenId;
         tokenAddresses[newTokenId] = tokenAddress;
+        tokenDecimals[newTokenId] = IERC20Metadata(tokenAddress).decimals();
         tokens.push(tokenAddress);
         nextTokenId++;
     }
