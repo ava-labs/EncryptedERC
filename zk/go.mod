@@ -1,6 +1,7 @@
 module github.com/ava-labs/EncryptedERC
 
 go 1.22.6
+
 toolchain go1.26.10
 
 require (
