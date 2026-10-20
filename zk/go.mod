@@ -1,7 +1,7 @@
 module github.com/ava-labs/EncryptedERC
 
 go 1.22.6
-toolchain go1.24.1
+toolchain go1.26.10
 
 require (
 	github.com/consensys/gnark v0.11.0
