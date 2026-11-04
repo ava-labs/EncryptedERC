@@ -7,8 +7,12 @@ on:
     branches:
       - main
 
+permissions: {}
+
 jobs:
   ci:
+    permissions:
+      contents: read
     strategy:
       matrix:
         node-version: [18.x]
@@ -18,6 +22,8 @@ jobs:
     steps:
       - name: "Check out the repo"
         uses: "actions/checkout@v4"
+        with:
+          persist-credentials: false
 
       - name: Setup Node.js
         uses: actions/setup-node@v3
